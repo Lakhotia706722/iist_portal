@@ -10,7 +10,7 @@ export default async function HodLayout({ children }: { children: React.ReactNod
 
   return (
     <AppShell
-      navGroups={HOD_NAV}
+      role={session.user.role}
       userName={session.user.name ?? "HoD"}
       userRole={session.user.role}
       userEmail={session.user.email ?? ""}

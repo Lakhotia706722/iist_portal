@@ -10,7 +10,7 @@ export default async function FacultyLayout({ children }: { children: React.Reac
 
   return (
     <AppShell
-      navGroups={FACULTY_NAV}
+      role={session.user.role}
       userName={session.user.name ?? "Faculty"}
       userRole={session.user.role}
       userEmail={session.user.email ?? ""}

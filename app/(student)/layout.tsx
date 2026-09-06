@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth/auth";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
-import { STUDENT_NAV } from "@/components/layout/nav-config";
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -10,7 +9,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   return (
     <AppShell
-      navGroups={STUDENT_NAV}
+      role={session.user.role}
       userName={session.user.name ?? "Student"}
       userRole={session.user.role}
       userEmail={session.user.email ?? ""}

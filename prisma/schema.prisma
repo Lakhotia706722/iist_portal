@@ -272,6 +272,9 @@ model Student {
   resumes        Resume[]
   documents      Document[]
 
+  // Phase 3 relations
+  applications   Application[]
+
   @@index([enrollmentNumber])
   @@index([branchId])
   @@index([batchId])
@@ -639,6 +642,9 @@ model ResumeVersion {
 
   resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
 
+  // Phase 3 — resume versions can be referenced by applications
+  applications Application[]
+
   @@unique([resumeId, version])
   @@index([resumeId])
 }
@@ -664,6 +670,296 @@ model Document {
 
   @@index([studentId])
   @@index([type])
+  @@index([status])
+}
+
+// ─── Phase 3: Companies & Placement Drives ───────────────────────────────────
+
+enum IndustryType {
+  TECHNOLOGY
+  FINANCE
+  CONSULTING
+  CORE_ENGINEERING
+  RESEARCH
+  DEFENSE
+  SPACE
+  HEALTHCARE
+  EDUCATION
+  MANUFACTURING
+  OTHER
+}
+
+enum WorkMode {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+enum DriveStatus {
+  DRAFT
+  PUBLISHED
+  APPLICATIONS_OPEN
+  APPLICATIONS_CLOSED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  APPLIED
+  UNDER_REVIEW
+  SHORTLISTED
+  WRITTEN_TEST
+  TECHNICAL_ROUND
+  HR_ROUND
+  FINAL_ROUND
+  SELECTED
+  REJECTED
+  WITHDRAWN
+  ON_HOLD
+}
+
+enum RoundType {
+  WRITTEN_TEST
+  APTITUDE_TEST
+  CODING_TEST
+  TECHNICAL_INTERVIEW
+  HR_INTERVIEW
+  GROUP_DISCUSSION
+  PRESENTATION
+  MEDICAL
+  DOCUMENT_VERIFICATION
+  OTHER
+}
+
+enum RoundMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum EligibilityOperator {
+  GTE   // >=
+  LTE   // <=
+  EQ    // ==
+  IN    // value in list
+  NOT_IN
+}
+
+enum EligibilityField {
+  CGPA
+  ACTIVE_BACKLOGS
+  TOTAL_BACKLOGS
+  BATCH
+  BRANCH
+  COURSE
+  GENDER
+  CATEGORY
+  PLACEMENT_STATUS   // not already placed
+  PROFILE_STATUS     // VERIFIED
+  TENTH_PERCENTAGE
+  TWELFTH_PERCENTAGE
+  CURRENT_SEMESTER
+}
+
+model Company {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique // url-safe identifier
+  industry    IndustryType @default(OTHER)
+  description String?     @db.Text
+  website     String?
+  logoKey     String?     // storage key for logo image
+  location    String?
+  headcount   String?     // e.g. "1000-5000"
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  drives      PlacementDrive[]
+
+  @@index([industry])
+  @@index([isActive])
+}
+
+model PlacementDrive {
+  id                String      @id @default(cuid())
+  companyId         String
+  title             String      // e.g. "Campus Hiring 2025 — SDE & Analyst"
+  academicYear      String      // e.g. "2024-2025"
+  status            DriveStatus @default(DRAFT)
+  description       String?     @db.Text
+  applicationOpenAt DateTime?
+  applicationCloseAt DateTime?
+  driveStartDate    DateTime?
+  driveEndDate      DateTime?
+  workMode          WorkMode    @default(ONSITE)
+  locations         String[]    // array of posting locations
+  bond              String?     // bond details if any
+  selectionProcess  String?     @db.Text // markdown description
+  perksAndBenefits  String?     @db.Text
+  pointOfContact    String?     // admin/HR contact name
+  pocEmail          String?
+  pocPhone          String?
+  createdById       String      // userId of admin who created
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  company      Company         @relation(fields: [companyId], references: [id])
+  jobRoles     JobRole[]
+  rounds       PlacementRound[]
+  applications Application[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([applicationCloseAt])
+  @@index([academicYear])
+}
+
+model JobRole {
+  id              String   @id @default(cuid())
+  driveId         String
+  title           String   // e.g. "Software Development Engineer"
+  description     String?  @db.Text
+  responsibilities String? @db.Text
+  requirements    String?  @db.Text
+  ctcMin          Float?   // LPA
+  ctcMax          Float?   // LPA
+  ctcBreakdown    String?  // e.g. "Base: 12L + Bonus: 2L + ESOPs: 4L"
+  openings        Int?
+  skills          String[] // required skill names
+  workMode        WorkMode @default(ONSITE)
+  locations       String[]
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  drive            PlacementDrive    @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  eligibilityRules EligibilityRule[]
+  applications     Application[]
+
+  @@index([driveId])
+}
+
+// One rule = one condition. All rules for a role must pass (AND logic).
+model EligibilityRule {
+  id         String             @id @default(cuid())
+  jobRoleId  String
+  field      EligibilityField
+  operator   EligibilityOperator
+  value      String             // stored as string; cast at eval time
+  label      String             // human-readable e.g. "Min CGPA 7.0"
+  isActive   Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+
+  jobRole    JobRole @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+
+  @@index([jobRoleId])
+}
+
+model Application {
+  id               String            @id @default(cuid())
+  studentId        String
+  driveId          String
+  jobRoleId        String
+  status           ApplicationStatus @default(APPLIED)
+  appliedAt        DateTime          @default(now())
+  resumeVersionId  String?           // which resume version was submitted
+  resumeSnapshot   Json?             // snapshot of profile at time of application
+  eligibilitySnapshot Json?          // snapshot of eligibility check result
+  withdrawnAt      DateTime?
+  withdrawReason   String?
+  adminNote        String?           // internal note for admin
+  updatedAt        DateTime          @updatedAt
+
+  student          Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  drive            PlacementDrive     @relation(fields: [driveId], references: [id])
+  jobRole          JobRole            @relation(fields: [jobRoleId], references: [id])
+  resumeVersion    ResumeVersion?     @relation(fields: [resumeVersionId], references: [id])
+  roundParticipations RoundParticipant[]
+  statusHistory    ApplicationStatusHistory[]
+
+  @@unique([studentId, jobRoleId])  // one application per student per role
+  @@index([studentId])
+  @@index([driveId])
+  @@index([jobRoleId])
+  @@index([status])
+  @@index([appliedAt])
+}
+
+model ApplicationStatusHistory {
+  id            String            @id @default(cuid())
+  applicationId String
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  changedById   String?           // userId of admin who changed
+  note          String?
+  createdAt     DateTime          @default(now())
+
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+model PlacementRound {
+  id            String     @id @default(cuid())
+  driveId       String
+  roundNumber   Int        // 1, 2, 3...
+  title         String     // e.g. "Aptitude Test", "Technical Interview 1"
+  type          RoundType  @default(OTHER)
+  mode          RoundMode  @default(OFFLINE)
+  scheduledAt   DateTime?
+  durationMins  Int?
+  venue         String?
+  meetingLink   String?
+  instructions  String?    @db.Text
+  isCompleted   Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  drive         PlacementDrive    @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  participants  RoundParticipant[]
+
+  @@unique([driveId, roundNumber])
+  @@index([driveId])
+}
+
+model RoundParticipant {
+  id            String           @id @default(cuid())
+  roundId       String
+  applicationId String
+  result        String?          // PASS / FAIL / PENDING / HOLD
+  remarks       String?
+  nextAction    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  round         PlacementRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  application   Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  attendance    AttendanceRecord?
+
+  @@unique([roundId, applicationId])
+  @@index([roundId])
+  @@index([applicationId])
+}
+
+model AttendanceRecord {
+  id                 String           @id @default(cuid())
+  roundParticipantId String           @unique
+  status             AttendanceStatus @default(ABSENT)
+  markedAt           DateTime         @default(now())
+  markedById         String?          // userId of admin who marked
+  note               String?
+
+  roundParticipant   RoundParticipant @relation(fields: [roundParticipantId], references: [id], onDelete: Cascade)
+
   @@index([status])
 }
 

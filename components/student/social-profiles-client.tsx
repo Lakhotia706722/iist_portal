@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { socialProfileSchema, SOCIAL_PLATFORMS, type SocialProfileInput } from "@/lib/validations/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import { NativeSelect as Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { EmptyState } from "@/components/shared/empty-state";

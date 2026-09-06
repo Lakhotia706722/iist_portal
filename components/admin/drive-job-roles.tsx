@@ -1,0 +1,252 @@
+/**
+ * Drive Job Roles Component — Phase 3
+ * 
+ * Manage job roles and eligibility criteria for a drive.
+ */
+
+"use client";
+
+import { useState, useEffect } from "react";
+import { Plus, Target, Edit, Trash2, Users, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { EmptyState } from "@/components/ui/empty-state";
+
+interface JobRole {
+  id: string;
+  title: string;
+  description: string | null;
+  ctcMin: number | null;
+  ctcMax: number | null;
+  openings: number | null;
+  skills: string[];
+  workMode: string;
+  locations: string[];
+  isActive: boolean;
+  eligibilityRules: Array<{
+    id: string;
+    field: string;
+    operator: string;
+    value: string;
+    label: string;
+    isActive: boolean;
+  }>;
+  _count: {
+    applications: number;
+    eligibilityRules: number;
+  };
+}
+
+interface DriveJobRolesProps {
+  driveId: string;
+  driveStatus: string;
+}
+
+export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
+  const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchJobRoles();
+  }, [driveId]);
+
+  const fetchJobRoles = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/admin/drives/${driveId}/roles`);
+      if (!response.ok) throw new Error("Failed to fetch job roles");
+
+      const data = await response.json();
+      setJobRoles(data.jobRoles);
+    } catch (error) {
+      console.error("Error fetching job roles:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load job roles",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const canEdit = !["ONGOING", "COMPLETED", "CANCELLED"].includes(driveStatus);
+
+  const formatSalary = (min: number | null, max: number | null) => {
+    if (!min && !max) return "Not specified";
+    if (min && max) return `₹${min}L - ₹${max}L`;
+    if (min) return `₹${min}L+`;
+    if (max) return `Up to ₹${max}L`;
+    return "Not specified";
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Job Roles & Eligibility</h2>
+          <p className="text-muted-foreground">Manage available positions and their requirements</p>
+        </div>
+        
+        {canEdit && (
+          <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Job Role
+          </Button>
+        )}
+      </div>
+
+      {/* Job Roles List */}
+      {jobRoles.length === 0 ? (
+        <EmptyState
+          icon={Target}
+          title="No job roles defined"
+          description="Start by adding job roles for this placement drive."
+          action={canEdit ? {
+            label: "Add Job Role",
+            onClick: () => setShowCreateDialog(true),
+          } : undefined}
+        />
+      ) : (
+        <div className="grid gap-6">
+          {jobRoles.map((role) => (
+            <Card key={role.id}>
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <CardTitle className="text-lg">{role.title}</CardTitle>
+                      <Badge variant={role.isActive ? "default" : "secondary"}>
+                        {role.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="h-4 w-4" />
+                        {formatSalary(role.ctcMin, role.ctcMax)}
+                      </span>
+                      
+                      {role.openings && (
+                        <>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Users className="h-4 w-4" />
+                            {role.openings} openings
+                          </span>
+                        </>
+                      )}
+                      
+                      <span>•</span>
+                      <span>{role._count.applications} applications</span>
+                    </div>
+                  </div>
+                  
+                  {canEdit && (
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" className="gap-1">
+                        <Edit className="h-4 w-4" />
+                        Edit
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1">
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {role.description && (
+                  <p className="text-sm text-muted-foreground">{role.description}</p>
+                )}
+                
+                {role.skills.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Required Skills</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {role.skills.map((skill, index) => (
+                        <Badge key={index} variant="outline" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {role.eligibilityRules.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Eligibility Criteria ({role.eligibilityRules.length} rules)</h4>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {role.eligibilityRules.slice(0, 4).map((rule) => (
+                        <div key={rule.id} className="text-xs bg-muted p-2 rounded">
+                          {rule.label}
+                        </div>
+                      ))}
+                      {role.eligibilityRules.length > 4 && (
+                        <div className="text-xs text-muted-foreground p-2">
+                          +{role.eligibilityRules.length - 4} more rules...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {role.locations.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Work Locations</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {role.locations.map((location, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {location}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Create Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Job Role</DialogTitle>
+            <DialogDescription>
+              Create a new job role for this placement drive.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-4">
+            <p className="text-muted-foreground">Job role form will be implemented here...</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

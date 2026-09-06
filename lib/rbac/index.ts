@@ -8,70 +8,110 @@ export type Permission =
   | "batch:read" | "batch:write"
   | "user:read" | "user:write" | "user:create" | "user:delete"
   | "audit:read" | "report:read"
-  | "company:read" | "company:write"
-  | "drive:read" | "drive:write"
-  | "application:read:own" | "application:write:own" | "application:read:all" | "application:write:all"
-  | "offer:read" | "offer:write"
-  | "skillup:read" | "skillup:write"
-  | "interview:read" | "interview:write"
   // Phase 2: Career Profile
   | "profile:read:own" | "profile:write:own"
-  | "profile:read:all"         // admin / faculty / hod can view all profiles
-  | "profile:visibility:write" // admin can toggle per-section visibility
-  | "video:verify"             // admin can verify/reject video profiles
-  // Phase 2: Skills catalog
+  | "profile:read:all"
+  | "profile:visibility:write"
+  | "video:verify"
   | "skill:read" | "skill:write"
-  // Phase 2: Documents
   | "document:read:own" | "document:write:own"
   | "document:read:all" | "document:verify"
-  // Phase 2: Resumes
   | "resume:read:own" | "resume:write:own"
-  | "resume:read:all";
+  | "resume:read:all"
+  // Phase 3: Companies & Drives
+  | "company:read" | "company:write"
+  | "drive:read" | "drive:write"
+  | "drive:publish"                    // publish / change status
+  | "jobrole:read" | "jobrole:write"
+  | "eligibility:read" | "eligibility:write"
+  // Phase 3: Applications
+  | "application:read:own" | "application:write:own"
+  | "application:read:all" | "application:write:all"
+  | "application:status:write"         // change application status
+  // Phase 3: Rounds
+  | "round:read" | "round:write"
+  | "round:participant:write"
+  // Phase 3: Shortlisting
+  | "shortlist:read" | "shortlist:write"
+  // Phase 3: Attendance
+  | "attendance:read" | "attendance:write"
+  // Phase 3: Offers
+  | "offer:read" | "offer:write"
+  // Phase 3: Misc
+  | "skillup:read" | "skillup:write"
+  | "interview:read" | "interview:write";
 
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   STUDENT: [
-    "student:read:own", "student:write:own", "department:read", "course:read",
-    "branch:read", "batch:read", "company:read", "drive:read",
-    "application:read:own", "application:write:own", "offer:read",
-    "skillup:read", "interview:read", "interview:write",
-    // Phase 2
+    "student:read:own", "student:write:own",
+    "department:read", "course:read", "branch:read", "batch:read",
     "profile:read:own", "profile:write:own",
     "skill:read",
     "document:read:own", "document:write:own",
     "resume:read:own", "resume:write:own",
+    // Phase 3
+    "company:read", "drive:read", "jobrole:read", "eligibility:read",
+    "application:read:own", "application:write:own",
+    "offer:read",
+    "skillup:read", "interview:read", "interview:write",
   ],
   FACULTY: [
-    "student:read:all", "department:read", "course:read", "branch:read",
-    "batch:read", "drive:read", "application:read:all", "offer:read",
-    "report:read", "skillup:read", "interview:read",
-    // Phase 2
+    "student:read:all",
+    "department:read", "course:read", "branch:read", "batch:read",
     "profile:read:all", "skill:read", "document:read:all", "resume:read:all",
+    // Phase 3
+    "company:read", "drive:read", "jobrole:read", "eligibility:read",
+    "application:read:all",
+    "round:read", "attendance:read", "shortlist:read",
+    "offer:read", "report:read",
+    "skillup:read", "interview:read",
   ],
   HOD: [
-    "student:read:all", "student:write:all", "department:read", "course:read",
-    "branch:read", "batch:read", "company:read", "drive:read", "drive:write",
-    "application:read:all", "application:write:all", "offer:read", "offer:write",
-    "report:read", "audit:read", "skillup:read", "skillup:write", "interview:read",
-    // Phase 2
+    "student:read:all", "student:write:all",
+    "department:read", "course:read", "branch:read", "batch:read",
     "profile:read:all", "skill:read", "document:read:all", "resume:read:all",
+    "audit:read", "report:read",
+    // Phase 3
+    "company:read", "drive:read", "drive:write", "drive:publish",
+    "jobrole:read", "jobrole:write", "eligibility:read", "eligibility:write",
+    "application:read:all", "application:write:all", "application:status:write",
+    "round:read", "round:write", "round:participant:write",
+    "shortlist:read", "shortlist:write",
+    "attendance:read", "attendance:write",
+    "offer:read", "offer:write",
+    "skillup:read", "skillup:write", "interview:read",
   ],
   TP_ADMIN: [
     "student:read:all", "student:write:all", "student:debar",
     "department:read", "department:write", "course:read", "course:write",
     "branch:read", "branch:write", "batch:read", "batch:write",
     "user:read", "user:write", "user:create", "user:delete",
-    "audit:read", "report:read", "company:read", "company:write",
-    "drive:read", "drive:write", "application:read:all", "application:write:all",
-    "offer:read", "offer:write", "skillup:read", "skillup:write",
-    "interview:read", "interview:write",
-    // Phase 2
+    "audit:read", "report:read",
     "profile:read:all", "profile:visibility:write",
     "skill:read", "skill:write",
     "video:verify",
     "document:read:all", "document:verify",
     "resume:read:all",
+    // Phase 3 — full access
+    "company:read", "company:write",
+    "drive:read", "drive:write", "drive:publish",
+    "jobrole:read", "jobrole:write",
+    "eligibility:read", "eligibility:write",
+    "application:read:all", "application:write:all", "application:status:write",
+    "round:read", "round:write", "round:participant:write",
+    "shortlist:read", "shortlist:write",
+    "attendance:read", "attendance:write",
+    "offer:read", "offer:write",
+    "skillup:read", "skillup:write",
+    "interview:read", "interview:write",
   ],
-  COMPANY_REP: ["company:read", "drive:read", "application:read:all", "offer:read", "offer:write"],
+  COMPANY_REP: [
+    "company:read",
+    "drive:read", "jobrole:read",
+    "application:read:all",
+    "shortlist:read",
+    "offer:read", "offer:write",
+  ],
 };
 
 export function hasPermission(role: string, permission: Permission): boolean {
@@ -84,4 +124,8 @@ export function hasAnyPermission(role: string, permissions: Permission[]): boole
 
 export function getRolePermissions(role: string): Permission[] {
   return ROLE_PERMISSIONS[role as AppRole] ?? [];
+}
+
+export function checkPermission(role: string, permission: Permission): boolean {
+  return hasPermission(role, permission);
 }

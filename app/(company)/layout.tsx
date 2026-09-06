@@ -10,7 +10,7 @@ export default async function CompanyLayout({ children }: { children: React.Reac
 
   return (
     <AppShell
-      navGroups={COMPANY_NAV}
+      role={session.user.role}
       userName={session.user.name ?? "Company Rep"}
       userRole={session.user.role}
       userEmail={session.user.email ?? ""}
