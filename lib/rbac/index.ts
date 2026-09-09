@@ -53,7 +53,12 @@ export type Permission =
   | "ai:use"
   // Phase 5: Analytics, reports, search, audit
   | "analytics:read"
-  | "search:read";
+  | "search:read"
+  // Phase 7: Company Rep portal — deliberately distinct from offer:read /
+  // application:read:all (which mean "unrestricted") so a company-rep grant
+  // can never accidentally inherit cross-company visibility.
+  | "company:read:own" | "drive:read:own"
+  | "application:read:company" | "offer:read:company";
 
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   STUDENT: [
@@ -140,12 +145,18 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "incident:read", "incident:write",
     "analytics:read", "search:read",
   ],
+  // Phase 7: deliberately does NOT hold company:read / drive:read /
+  // jobrole:read / application:read:all / shortlist:read — those are the
+  // *unrestricted* variants used by admin-facing routes, and a company rep
+  // holding them was the exact cross-company leak this phase closes (see
+  // ARCHITECTURE.md). Everything a company rep needs is served through
+  // /api/company/* routes gated on the :own / :company variants below, each
+  // of which resolves the caller's companyId server-side from their own
+  // CompanyRepProfile — never from a client-supplied value.
   COMPANY_REP: [
-    "company:read",
-    "drive:read", "jobrole:read",
-    "application:read:all",
-    "shortlist:read",
-    "offer:read", "offer:write",
+    "company:read:own", "drive:read:own",
+    "application:read:company",
+    "offer:read:company", "offer:write",
     "notification:read:own", "notification:write:own",
     "calendar:read",
   ],

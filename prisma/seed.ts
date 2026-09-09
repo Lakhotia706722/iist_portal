@@ -173,6 +173,21 @@ async function main() {
   console.log("  ✓ HoD:", hodUser.email);
 
   // ── Company Rep ───────────────────────────────────────────────────────────────
+  // Phase 7: CompanyRepProfile is now scoped to a real Company row — create
+  // one and link it, rather than leaving companyId null (which the /company
+  // portal treats as "not yet linked" and refuses to serve data for).
+  const isro = await prisma.company.upsert({
+    where: { slug: "isro" },
+    update: {},
+    create: {
+      name: "ISRO",
+      slug: "isro",
+      industry: "SPACE",
+      description: "Indian Space Research Organisation",
+      isActive: true,
+    },
+  });
+
   const companyUser = await prisma.user.upsert({
     where: { email: "recruiter@isro.gov.in" },
     update: {},
@@ -187,14 +202,15 @@ async function main() {
   });
   await prisma.companyRepProfile.upsert({
     where: { userId: companyUser.id },
-    update: {},
+    update: { companyId: isro.id },
     create: {
       userId: companyUser.id,
       companyName: "ISRO",
       designation: "HR Manager",
+      companyId: isro.id,
     },
   });
-  console.log("  ✓ Company Rep:", companyUser.email);
+  console.log("  ✓ Company Rep:", companyUser.email, "-> linked to", isro.name);
 
   // ── Student (complete profile) ────────────────────────────────────────────────
   const studentUser = await prisma.user.upsert({

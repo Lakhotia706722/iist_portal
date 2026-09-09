@@ -149,7 +149,7 @@ export const FACULTY_NAV: NavGroup[] = [
   {
     title: "Placements",
     items: [
-      { label: "Students", href: "/faculty/students", icon: GraduationCap , comingSoon: true },
+      { label: "Students", href: "/faculty/students", icon: GraduationCap },
       { label: "Drives", href: "/faculty/drives", icon: Briefcase , comingSoon: true },
       { label: "Applications", href: "/faculty/applications", icon: ClipboardList , comingSoon: true },
       { label: "Attendance", href: "/faculty/attendance", icon: ClipboardCheck , comingSoon: true },
@@ -180,7 +180,8 @@ export const HOD_NAV: NavGroup[] = [
   {
     title: "Placements",
     items: [
-      { label: "Students", href: "/hod/students", icon: GraduationCap , comingSoon: true },
+      { label: "Students", href: "/hod/students", icon: GraduationCap },
+      { label: "Compliance", href: "/hod/compliance", icon: ShieldCheck },
       { label: "Drives", href: "/hod/drives", icon: Briefcase , comingSoon: true },
       { label: "Applications", href: "/hod/applications", icon: ClipboardList , comingSoon: true },
       { label: "Offers", href: "/hod/offers", icon: Award , comingSoon: true },
@@ -206,9 +207,10 @@ export const COMPANY_NAV: NavGroup[] = [
   {
     title: "Recruitment",
     items: [
-      { label: "Job Postings", href: "/company/drives", icon: Briefcase , comingSoon: true },
-      { label: "Applications", href: "/company/applications", icon: ClipboardList , comingSoon: true },
-      { label: "Offers", href: "/company/offers", icon: Award , comingSoon: true },
+      // "Job Postings" / a standalone drives list intentionally isn't a
+      // separate nav entry — the dashboard already lists every drive with a
+      // link into its scoped detail view, which is where applicants live.
+      { label: "Offers", href: "/company/offers", icon: Award },
     ],
   },
   {
