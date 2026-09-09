@@ -384,10 +384,19 @@ model CompanyRepProfile {
   userId      String   @unique
   companyName String
   designation String?
+  /// Phase 7: the specific Company this rep is scoped to. Nullable so
+  /// existing rows aren't broken by the migration and an admin can create a
+  /// rep account before the Company row exists — but every /api/company/*
+  /// route treats a null companyId as "not yet linked" and refuses to serve
+  /// data rather than falling back to an unscoped view.
+  companyId   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     Company? @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
 }
 
 // ─── Phase 2: Career Profile ──────────────────────────────────────────────────
@@ -803,6 +812,7 @@ model Company {
   drives      PlacementDrive[]
   offers      Offer[]
   disciplineIncidents DisciplineIncident[]
+  companyReps CompanyRepProfile[]
 
   @@index([industry])
   @@index([isActive])

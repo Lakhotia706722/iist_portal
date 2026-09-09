@@ -316,6 +316,112 @@ containing a nonce.
 
 ---
 
+## 15. Faculty / HOD / Company Rep portal scoping (Phase 7)
+
+Before this phase, HOD reached straight into admin-owned pages (`/hod/analytics`
+rendering the same `AnalyticsClient` as `/admin/analytics`, hitting the same
+unscoped `analytics:read`-gated routes), Faculty had no dashboard at all, and
+Company Rep held `drive:read` / `company:read` / `application:read:all` /
+`shortlist:read` — the *unrestricted* variants meant for admin/faculty/hod —
+which meant a company rep who called the existing `/api/admin/drives/[id]`
+or `/api/admin/drives/[id]/applications` routes directly could see **any**
+company's drive and applicant data, and `offer:write` (needed for legitimate
+status updates) had no ownership check at all, so a rep could change the
+status of *any* company's offer. Neither was ever exploited in practice —
+the old `/company` frontend never called those routes — but both were real,
+reachable gaps, not hypothetical ones.
+
+**Faculty** (`server/services/faculty.service.ts`, `/faculty/dashboard`,
+`/faculty/students`): no permission changes — faculty already held
+`student:read:all` etc. unrestricted, same as HOD/TP_ADMIN, and still do.
+This phase only gave them a real home base (their own created tests/
+interviews with participation counts, a department-scoped "needs attention"
+list) and a read-only assigned-students view. No new write capability.
+
+**HOD** (`server/services/hod.service.ts`, `/hod/dashboard`, `/hod/students`,
+`/hod/compliance`): also no permission changes — `analytics:read` /
+`student:read:all` / `compliance:read:all` stay unrestricted at the RBAC
+level (HOD and TP_ADMIN share them). What changed is enforcement:
+`getDepartmentIdForHod()` resolves the caller's own `HodProfile.departmentId`
+server-side and every one of these three routes hard-filters on it
+(`{ branch: { departmentId } }`, the same shape `search.service.ts` already
+used for HOD/FACULTY-scoped search) — there is no client-supplied
+department parameter to pass a different value into. `getDepartmentAnalytics()`
+(existing, unmodified) is reused directly for the dashboard's placement-rate/
+package figures. `compliance:write` (overrides) was already TP_ADMIN-only in
+the RBAC matrix — confirmed, not changed.
+
+**Deliberate scope decision — `/hod/analytics` and `/hod/audit-logs` stay
+institute-wide, not department-scoped.** These two pre-existing pages reuse
+the admin `AnalyticsClient`/`AuditLogClient` components and remain reachable
+with full cross-department visibility (department-breakdown table, company
+summaries, full audit trail). Left as-is deliberately, not overlooked:
+1. They only ever surface **aggregate** figures (counts, rates) or
+   institute-wide operational history — never individual student PII, which
+   is the actual sensitive surface (that's what `/hod/students` and
+   `/hod/compliance` scope down).
+2. `AuditLog` entries aren't cleanly department-partitionable — most rows
+   (PolicyRule changes, User management, Company/Drive edits) have no
+   student/department association at all.
+3. The new `/hod/dashboard` is the properly department-scoped analytics view
+   the phase spec asked for and fully satisfies it on its own; `/hod/analytics`
+   is legacy-reachable, not the primary path.
+**Revisit trigger:** if `/hod/analytics`'s department-breakdown table is ever
+extended to include individual student rows (currently aggregate-only), scope
+it the same way `/hod/students` is scoped.
+
+**Company Rep** (`server/services/company-rep.service.ts`, `/api/company/*`,
+`/company/dashboard`, `/company/drives/[id]`, `/company/offers`) — the real
+work of this phase:
+- **Schema:** `CompanyRepProfile.companyId` (nullable FK → `Company`) added
+  via `prisma migrate dev` (migration `20260909105259_phase7_company_rep_scoping`).
+  Nullable so an admin can create the account before the Company row exists;
+  every `/api/company/*` route treats `companyId: null` as "not linked yet"
+  and fails closed with a 400, never an unscoped fallback (verified in
+  `scripts/verify-phase7.ts`).
+- **RBAC:** `COMPANY_REP` no longer holds `company:read` / `drive:read` /
+  `jobrole:read` / `application:read:all` / `shortlist:read` (the
+  unrestricted variants). It now holds four new, deliberately narrow
+  permissions — `company:read:own`, `drive:read:own`,
+  `application:read:company`, `offer:read:company` — each served only by
+  `/api/company/*` routes that resolve `companyId` from the caller's own
+  `CompanyRepProfile` via `getCompanyIdForRep()`, never from a client value.
+  `offer:write` stays (needed for status updates), but is now scoped: both
+  the new `/api/company/offers/[id]/status` route *and* the legacy
+  `/api/admin/offers/[id]/status` / `/api/admin/offers/[id]/letter` routes
+  (which COMPANY_REP can still technically reach and legitimately need for
+  some flows) call `assertOfferOwnedByCallerIfCompanyRep()` first — closing
+  the offer:write gap at its source, not just in the new routes.
+- **The field allowlist** (`APPLICANT_SELECT` in `company-rep.service.ts`) —
+  the one place under-scoping would leak student data across companies.
+  Included: student name, enrollment number, branch, batch, the resume
+  version actually submitted with that application (signed URL), application
+  status, and per-round `result` + attendance status. Excluded, explicitly:
+  every Student PII field beyond name/branch/batch (DOB, gender, category,
+  religion, aadhar, phone numbers, addresses, family details, physical
+  stats, passport — see the `Student` model), `Application.adminNote` and
+  `.eligibilitySnapshot` (internal), any other application the student made
+  (to this or another company), and `RoundParticipant.remarks`/`.nextAction`
+  (internal interviewer notes — only `result` is exposed). Enforced as an
+  explicit Prisma `select` (not `include`), not a UI-level hide. Verified in
+  `scripts/verify-phase7.ts` by asserting the raw JSON response contains
+  none of these field names.
+- **Cross-company isolation:** every company-scoped route 404s (not 403s) on
+  a foreign drive/offer ID — a rep has no legitimate reason to learn a
+  foreign ID even exists, same reasoning as the rest of the RBAC error
+  convention. Verified with two real accounts against two real companies
+  (ISRO / Verify Corp) in `scripts/verify-phase7.ts`: cross-company drive
+  read, applicant list, offer read, and offer *write* (both the new and the
+  legacy admin route) are all confirmed blocked.
+- **Pre-placement talk:** read access opened to company reps for their own
+  drive's PPT info (schedule, venue, attachments) — a rep naturally wants to
+  see what's been shared about their drive. Authorship (create/edit) stays
+  admin-only; reps never hold `drive:write`, so the existing write paths were
+  already closed to them and are unchanged. Deliberate choice, documented
+  per the same format as the analytics/audit-log decision above.
+
+---
+
 ## Testing
 
 - `npm test` — Vitest (jsdom). Component and unit tests live beside their source.
@@ -331,3 +437,4 @@ containing a nonce.
 - `npx tsx scripts/verify-phase6.ts [baseUrl]` — CSP nonce coverage (public page, redirect response, per-request uniqueness)
 - `npx tsx scripts/verify-storage-adapter.ts` — storage adapter E2E (upload/exists/download/getSignedUrl/delete) against whichever `STORAGE_DRIVER` is set — run once against `local`, again against `s3` with real credentials before deploy
 - `npx tsx scripts/migrate-local-storage-to-s3.ts` — one-off local→S3 file migration (no-op if, as of Phase 6, no files were ever stored locally)
+- `npx tsx scripts/verify-phase7.ts [baseUrl]` — Faculty/HOD/Company Rep portal E2E, incl. cross-department and cross-company isolation with two real accounts each, and the applicant field-allowlist check
