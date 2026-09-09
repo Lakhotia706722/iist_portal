@@ -29,6 +29,9 @@ import {
   Globe,
   Video,
   Star,
+  Sparkles,
+  ShieldAlert,
+  Search,
 } from "lucide-react";
 import type { NavGroup } from "./sidebar";
 
@@ -40,7 +43,7 @@ export const STUDENT_NAV: NavGroup[] = [
     title: "My Profile",
     items: [
       { label: "Career Profile", href: "/student/profile/career", icon: Star },
-      { label: "Personal & Academic", href: "/student/profile", icon: User },
+      { label: "Personal & Academic", href: "/student/profile", icon: User , comingSoon: true },
       { label: "Skills", href: "/student/profile/skills", icon: Code2 },
       { label: "Projects", href: "/student/profile/projects", icon: FolderGit2 },
       { label: "Internships", href: "/student/profile/internships", icon: Briefcase },
@@ -62,6 +65,8 @@ export const STUDENT_NAV: NavGroup[] = [
       { label: "Opportunities", href: "/student/opportunities", icon: Briefcase },
       { label: "My Applications", href: "/student/applications", icon: ClipboardList },
       { label: "Journey Tracker", href: "/student/journey", icon: Route },
+      { label: "Placement History", href: "/student/placement-history", icon: Award },
+      { label: "Compliance Status", href: "/student/compliance", icon: ShieldCheck },
     ],
   },
   {
@@ -69,6 +74,7 @@ export const STUDENT_NAV: NavGroup[] = [
     items: [
       { label: "Skill Up", href: "/student/skillup", icon: BookOpen },
       { label: "Mock Interviews", href: "/student/mock-interviews", icon: Mic2 },
+      { label: "AI Resume Builder", href: "/student/ai-resume-builder", icon: Sparkles },
     ],
   },
   {
@@ -88,8 +94,8 @@ export const ADMIN_NAV: NavGroup[] = [
   {
     title: "People",
     items: [
-      { label: "Students", href: "/admin/students", icon: GraduationCap },
-      { label: "Users & Roles", href: "/admin/users-roles", icon: UserCog },
+      { label: "Students", href: "/admin/students", icon: GraduationCap , comingSoon: true },
+      { label: "Users & Roles", href: "/admin/users-roles", icon: UserCog , comingSoon: true },
     ],
   },
   {
@@ -97,10 +103,10 @@ export const ADMIN_NAV: NavGroup[] = [
     items: [
       { label: "Companies", href: "/admin/companies", icon: Building2 },
       { label: "Drives", href: "/admin/drives", icon: Briefcase },
-      { label: "Applications", href: "/admin/applications", icon: ClipboardList },
-      { label: "Shortlisting", href: "/admin/shortlisting", icon: ListChecks },
-      { label: "Rounds", href: "/admin/rounds", icon: Layers },
-      { label: "Attendance", href: "/admin/attendance", icon: ClipboardCheck },
+      { label: "Applications", href: "/admin/applications", icon: ClipboardList , comingSoon: true },
+      { label: "Shortlisting", href: "/admin/shortlisting", icon: ListChecks , comingSoon: true },
+      { label: "Rounds", href: "/admin/rounds", icon: Layers , comingSoon: true },
+      { label: "Attendance", href: "/admin/attendance", icon: ClipboardCheck , comingSoon: true },
       { label: "Offers", href: "/admin/offers", icon: Award },
     ],
   },
@@ -124,13 +130,14 @@ export const ADMIN_NAV: NavGroup[] = [
     title: "Config",
     items: [
       { label: "Departments", href: "/admin/departments", icon: Building },
-      { label: "Skills Catalog", href: "/admin/skills", icon: Code2 },
-      { label: "Policy Rules", href: "/admin/policy-rules", icon: ShieldCheck },
+      { label: "Skills Catalog", href: "/admin/skills", icon: Code2 , comingSoon: true },
+      { label: "Policy Rules", href: "/admin/policy", icon: ShieldCheck },
       { label: "Notifications", href: "/admin/notifications", icon: Bell },
       { label: "Documents", href: "/admin/documents", icon: FolderOpen },
+      { label: "Calendar", href: "/admin/calendar", icon: CalendarDays },
       { label: "Video Profiles", href: "/admin/video-profiles", icon: Video },
       { label: "Profile Visibility", href: "/admin/settings/profile-visibility", icon: Star },
-      { label: "Settings", href: "/admin/settings", icon: Settings },
+      { label: "Settings", href: "/admin/settings", icon: Settings , comingSoon: true },
     ],
   },
 ];
@@ -142,16 +149,23 @@ export const FACULTY_NAV: NavGroup[] = [
   {
     title: "Placements",
     items: [
-      { label: "Students", href: "/faculty/students", icon: GraduationCap },
-      { label: "Drives", href: "/faculty/drives", icon: Briefcase },
-      { label: "Applications", href: "/faculty/applications", icon: ClipboardList },
-      { label: "Attendance", href: "/faculty/attendance", icon: ClipboardCheck },
+      { label: "Students", href: "/faculty/students", icon: GraduationCap , comingSoon: true },
+      { label: "Drives", href: "/faculty/drives", icon: Briefcase , comingSoon: true },
+      { label: "Applications", href: "/faculty/applications", icon: ClipboardList , comingSoon: true },
+      { label: "Attendance", href: "/faculty/attendance", icon: ClipboardCheck , comingSoon: true },
+    ],
+  },
+  {
+    title: "Career Dev",
+    items: [
+      { label: "SkillUp", href: "/faculty/skillup", icon: BookOpen },
+      { label: "Mock Interviews", href: "/faculty/mock-interviews", icon: Mic2 },
     ],
   },
   {
     title: "Reporting",
     items: [
-      { label: "Reports", href: "/faculty/reports", icon: BarChart3 },
+      { label: "Reports", href: "/faculty/reports", icon: BarChart3 , comingSoon: true },
     ],
   },
   {
@@ -166,16 +180,16 @@ export const HOD_NAV: NavGroup[] = [
   {
     title: "Placements",
     items: [
-      { label: "Students", href: "/hod/students", icon: GraduationCap },
-      { label: "Drives", href: "/hod/drives", icon: Briefcase },
-      { label: "Applications", href: "/hod/applications", icon: ClipboardList },
-      { label: "Offers", href: "/hod/offers", icon: Award },
+      { label: "Students", href: "/hod/students", icon: GraduationCap , comingSoon: true },
+      { label: "Drives", href: "/hod/drives", icon: Briefcase , comingSoon: true },
+      { label: "Applications", href: "/hod/applications", icon: ClipboardList , comingSoon: true },
+      { label: "Offers", href: "/hod/offers", icon: Award , comingSoon: true },
     ],
   },
   {
     title: "Reporting",
     items: [
-      { label: "Reports", href: "/hod/reports", icon: BarChart3 },
+      { label: "Reports", href: "/hod/reports", icon: BarChart3 , comingSoon: true },
       { label: "Analytics", href: "/hod/analytics", icon: BarChart3 },
       { label: "Audit Logs", href: "/hod/audit-logs", icon: ScrollText },
     ],
@@ -192,9 +206,9 @@ export const COMPANY_NAV: NavGroup[] = [
   {
     title: "Recruitment",
     items: [
-      { label: "Job Postings", href: "/company/drives", icon: Briefcase },
-      { label: "Applications", href: "/company/applications", icon: ClipboardList },
-      { label: "Offers", href: "/company/offers", icon: Award },
+      { label: "Job Postings", href: "/company/drives", icon: Briefcase , comingSoon: true },
+      { label: "Applications", href: "/company/applications", icon: ClipboardList , comingSoon: true },
+      { label: "Offers", href: "/company/offers", icon: Award , comingSoon: true },
     ],
   },
   {

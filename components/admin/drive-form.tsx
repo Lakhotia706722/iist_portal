@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarIcon, Loader2, Plus, X } from "lucide-react";
@@ -123,15 +123,11 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
     },
   });
 
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/companies?isActive=true");
       if (!response.ok) throw new Error("Failed to fetch companies");
-      
+
       const data = await response.json();
       setCompanies(data.companies);
     } catch (error) {
@@ -144,7 +140,11 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
     } finally {
       setCompaniesLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
 
   const handleAddLocation = () => {
     if (!locationInput.trim()) return;
@@ -520,7 +520,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
                       onChange={(e) => setLocationInput(e.target.value)}
                       onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddLocation())}
                     />
-                    <Button type="button" variant="outline" onClick={handleAddLocation}>
+                    <Button type="button" variant="outline" onClick={handleAddLocation} aria-label="Add location">
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>

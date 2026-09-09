@@ -126,6 +126,7 @@ model User {
   hodProfile           HodProfile?
   companyRepProfile    CompanyRepProfile?
   auditLogs            AuditLog[]
+  notifications        Notification[]
 
   @@index([email])
   @@index([role])
@@ -145,6 +146,8 @@ model Department {
   branches      Branch[]
   hodProfile    HodProfile?
   facultyProfiles FacultyProfile[]
+  tests         Test[]
+  calendarEvents CalendarEvent[]
 
   @@index([code])
 }
@@ -193,6 +196,9 @@ model Batch {
 
   branch       Branch   @relation(fields: [branchId], references: [id])
   students     Student[]
+  tests        Test[]
+  calendarEvents CalendarEvent[]
+  policyRules  PolicyRule[]
 
   @@index([branchId])
   @@index([academicYear])
@@ -274,6 +280,16 @@ model Student {
 
   // Phase 3 relations
   applications   Application[]
+  offers         Offer[]
+
+  // Phase 4 relations
+  testParticipations TestParticipant[]
+  testResults        TestResult[]
+  mockInterviews     MockInterview[]
+
+  // Phase 5 relations
+  disciplineIncidents DisciplineIncident[]
+  complianceOverride  ComplianceOverride?
 
   @@index([enrollmentNumber])
   @@index([branchId])
@@ -767,6 +783,7 @@ enum EligibilityField {
   TENTH_PERCENTAGE
   TWELFTH_PERCENTAGE
   CURRENT_SEMESTER
+  SKILLUP_SCORE      // avg SkillUp test percentage; value may be "<typeSlug>:<pct>"
 }
 
 model Company {
@@ -784,6 +801,8 @@ model Company {
   updatedAt   DateTime    @updatedAt
 
   drives      PlacementDrive[]
+  offers      Offer[]
+  disciplineIncidents DisciplineIncident[]
 
   @@index([industry])
   @@index([isActive])
@@ -816,6 +835,10 @@ model PlacementDrive {
   jobRoles     JobRole[]
   rounds       PlacementRound[]
   applications Application[]
+  offers       Offer[]
+  calendarEvents CalendarEvent[]
+  prePlacementTalk PrePlacementTalk?
+  disciplineIncidents DisciplineIncident[]
 
   @@index([companyId])
   @@index([status])
@@ -844,6 +867,7 @@ model JobRole {
   drive            PlacementDrive    @relation(fields: [driveId], references: [id], onDelete: Cascade)
   eligibilityRules EligibilityRule[]
   applications     Application[]
+  offers           Offer[]
 
   @@index([driveId])
 }
@@ -885,6 +909,7 @@ model Application {
   resumeVersion    ResumeVersion?     @relation(fields: [resumeVersionId], references: [id])
   roundParticipations RoundParticipant[]
   statusHistory    ApplicationStatusHistory[]
+  offer            Offer?
 
   @@unique([studentId, jobRoleId])  // one application per student per role
   @@index([studentId])
@@ -961,6 +986,489 @@ model AttendanceRecord {
   roundParticipant   RoundParticipant @relation(fields: [roundParticipantId], references: [id], onDelete: Cascade)
 
   @@index([status])
+}
+
+
+// ─── Phase 3: Offers ─────────────────────────────────────────────────────────
+
+enum OfferStatus {
+  OFFERED
+  ACCEPTED
+  DECLINED
+  JOINED
+  WITHDRAWN
+}
+
+enum OfferType {
+  FULL_TIME
+  INTERNSHIP
+  INTERNSHIP_WITH_PPO
+  PPO
+  CONTRACT
+}
+
+// Core = role aligned with the student's engineering discipline.
+enum OfferCategory {
+  CORE
+  NON_CORE
+}
+
+model Offer {
+  id             String        @id @default(cuid())
+  applicationId  String        @unique // one offer per application
+  studentId      String
+  driveId        String
+  jobRoleId      String
+  companyId      String
+
+  category       OfferCategory @default(NON_CORE)
+  type           OfferType     @default(FULL_TIME)
+  isPPO          Boolean       @default(false)
+
+  ctc            Float?        // LPA — for full-time offers
+  stipend        Float?        // per month INR — for internship offers
+  ctcBreakdown   String?
+  location       String?
+
+  offerDate      DateTime
+  joiningDate    DateTime?
+  offerLetterKey String?       // storage key for the offer letter
+
+  status         OfferStatus   @default(OFFERED)
+  statusNote     String?
+  acceptedAt     DateTime?
+  declinedAt     DateTime?
+  joinedAt       DateTime?
+  withdrawnAt    DateTime?
+
+  createdById    String        // userId of admin who recorded the offer
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  application    Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  drive          PlacementDrive @relation(fields: [driveId], references: [id])
+  jobRole        JobRole        @relation(fields: [jobRoleId], references: [id])
+  company        Company        @relation(fields: [companyId], references: [id])
+
+  @@index([studentId])
+  @@index([companyId])
+  @@index([driveId])
+  @@index([status])
+  @@index([offerDate])
+}
+
+
+// ─── Phase 4: SkillUp & Assessment Center ────────────────────────────────────
+
+enum TestMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum TestStatus {
+  DRAFT
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+/// Assessment categories are data, not an enum — the college adds its own
+/// (aptitude, logical reasoning, technical, coding, communication, ...).
+model TestType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tests       Test[]
+
+  @@index([isActive])
+}
+
+model Test {
+  id           String     @id @default(cuid())
+  title        String
+  testTypeId   String
+  description  String?    @db.Text
+  scheduledAt  DateTime
+  durationMins Int?
+  maxMarks     Float
+  passingMarks Float
+  mode         TestMode   @default(OFFLINE)
+  venue        String?
+  meetingLink  String?
+  status       TestStatus @default(SCHEDULED)
+
+  // Scope — null means "no restriction on this dimension"
+  departmentId String?
+  batchId      String?
+
+  createdById  String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  testType     TestType    @relation(fields: [testTypeId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id])
+  batch        Batch?      @relation(fields: [batchId], references: [id])
+  participants TestParticipant[]
+  results      TestResult[]
+
+  @@index([testTypeId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([batchId])
+}
+
+/// Explicit eligible-students list. When a test has no participants, scope
+/// falls back to department/batch.
+model TestParticipant {
+  id        String   @id @default(cuid())
+  testId    String
+  studentId String
+  createdAt DateTime @default(now())
+
+  test      Test    @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, studentId])
+  @@index([studentId])
+}
+
+model TestResult {
+  id            String   @id @default(cuid())
+  testId        String
+  studentId     String
+  marksObtained Float
+  maxMarks      Float    // snapshot of Test.maxMarks when recorded
+  percentage    Float
+  isPassed      Boolean
+  rank          Int?
+  remarks       String?
+  recordedById  String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  test          Test    @relation(fields: [testId], references: [id], onDelete: Cascade)
+  student       Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, studentId])
+  @@index([studentId])
+  @@index([testId])
+}
+
+
+// ─── Phase 4: Mock Interview Center ──────────────────────────────────────────
+
+enum InterviewType {
+  TECHNICAL
+  HR
+  MANAGERIAL
+  CASE_STUDY
+  GROUP_DISCUSSION
+  STRESS
+  MIXED
+}
+
+enum InterviewMode {
+  ONLINE
+  OFFLINE
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+model MockInterview {
+  id            String          @id @default(cuid())
+  studentId     String
+  /// Free text so external/industry panellists can be recorded without a User row.
+  interviewerName String
+  /// Set when the interviewer is a portal user (faculty/admin).
+  interviewerId String?
+  scheduledAt   DateTime
+  durationMins  Int?
+  targetRole    String?
+  type          InterviewType   @default(MIXED)
+  mode          InterviewMode   @default(OFFLINE)
+  venue         String?
+  meetingLink   String?
+  status        InterviewStatus @default(SCHEDULED)
+  createdById   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  student       Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  result        InterviewResult?
+
+  @@index([studentId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+/// Scores are 0-10. AI-generated feedback is Phase 5; this is manual entry.
+model InterviewResult {
+  id                    String   @id @default(cuid())
+  mockInterviewId       String   @unique
+
+  technicalScore        Float?
+  communicationScore    Float?
+  confidenceScore       Float?
+  problemSolvingScore   Float?
+  hrScore               Float?
+  overallScore          Float
+
+  feedback              String?  @db.Text
+  strengths             String[]
+  weaknesses            String[]
+  improvementSuggestions String[]
+
+  recordedById          String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  mockInterview         MockInterview @relation(fields: [mockInterviewId], references: [id], onDelete: Cascade)
+}
+
+
+// ─── Phase 4: Notifications ──────────────────────────────────────────────────
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+model Notification {
+  id         String               @id @default(cuid())
+  userId     String
+  subject    String
+  message    String               @db.Text
+  /// Free-form so new modules can add their own ("placement", "skillup", ...).
+  category   String               @default("general")
+  priority   NotificationPriority @default(NORMAL)
+  /// Deep link into the record this notification is about.
+  link       String?
+  entityType String?
+  entityId   String?
+  readAt     DateTime?
+  createdAt  DateTime             @default(now())
+
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@index([category])
+}
+
+/// Admin-editable email bodies. Placeholders use {{variable}} and are filled
+/// server-side by interpolateTemplate().
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  subject     String
+  bodyHtml    String   @db.Text
+  bodyText    String?  @db.Text
+  description String?
+  /// Placeholder names this template understands, for the admin UI.
+  variables   String[]
+  isActive    Boolean  @default(true)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+
+// ─── Phase 4: Placement Calendar ─────────────────────────────────────────────
+
+enum CalendarEventType {
+  DRIVE_VISIT
+  PRE_PLACEMENT_TALK
+  APTITUDE_TEST
+  CODING_TEST
+  TECHNICAL_INTERVIEW
+  HR_INTERVIEW
+  SKILLUP_TEST
+  MOCK_INTERVIEW
+  DOCUMENT_DEADLINE
+  APPLICATION_DEADLINE
+  OTHER
+}
+
+/// Standalone events. Events that already exist as rounds/tests/interviews are
+/// projected on the fly rather than duplicated here — see calendar.service.
+model CalendarEvent {
+  id          String            @id @default(cuid())
+  title       String
+  type        CalendarEventType @default(OTHER)
+  description String?           @db.Text
+  startAt     DateTime
+  endAt       DateTime?
+  venue       String?
+  meetingLink String?
+
+  /// Optional links to the record this event is about.
+  driveId     String?
+  roundId     String?
+
+  /// Audience scope — null on both means institute-wide.
+  departmentId String?
+  batchId      String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  drive       PlacementDrive? @relation(fields: [driveId], references: [id], onDelete: Cascade)
+  department  Department?     @relation(fields: [departmentId], references: [id])
+  batch       Batch?          @relation(fields: [batchId], references: [id])
+
+  @@index([startAt])
+  @@index([type])
+  @@index([driveId])
+  @@index([batchId])
+}
+
+/// Pre-placement talk for a drive: one per drive.
+model PrePlacementTalk {
+  id            String   @id @default(cuid())
+  driveId       String   @unique
+  scheduledAt   DateTime
+  durationMins  Int?
+  venue         String?
+  meetingLink   String?
+  instructions  String?  @db.Text
+  faq           String?  @db.Text
+  /// Storage keys for the deck / JD attachments.
+  attachmentKeys String[]
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  drive         PlacementDrive @relation(fields: [driveId], references: [id], onDelete: Cascade)
+}
+
+
+// ─── Phase 5: Policy Engine ───────────────────────────────────────────────────
+
+enum PolicyValueType {
+  NUMBER
+  BOOLEAN
+  STRING
+}
+
+/// Policy values live here, never hardcoded. A row with batchId = null is the
+/// institute-wide default for `key`; a row with batchId set overrides it for
+/// that batch only. Uniqueness of (key, batchId) is enforced in the service
+/// layer (Postgres treats NULLs as distinct, so a DB constraint can't do it).
+model PolicyRule {
+  id          String          @id @default(cuid())
+  key         String
+  value       String          // cast per `type` at read time
+  type        PolicyValueType @default(STRING)
+  description String?
+  batchId     String?         // null = institute-wide default
+
+  updatedById String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  batch       Batch?          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([key])
+  @@index([batchId])
+}
+
+
+// ─── Phase 5: Compliance / Discipline ────────────────────────────────────────
+
+enum ViolationType {
+  ATTENDANCE
+  MISCONDUCT
+  DOCUMENT_FRAUD
+  OFFER_RECIPROCITY
+  POLICY_VIOLATION
+  ACADEMIC_INTEGRITY
+  OTHER
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+model DisciplineIncident {
+  id            String           @id @default(cuid())
+  studentId     String
+  companyId     String?
+  driveId       String?
+  violationType ViolationType
+  severity      IncidentSeverity @default(MEDIUM)
+  description   String           @db.Text
+  incidentDate  DateTime
+  actionTaken   String?          @db.Text
+  adminRemarks  String?          @db.Text
+  documentKey   String?          // storage key for supporting evidence
+  status        IncidentStatus   @default(OPEN)
+
+  reportedById  String
+  resolvedById  String?
+  resolvedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  company       Company?         @relation(fields: [companyId], references: [id])
+  drive         PlacementDrive?  @relation(fields: [driveId], references: [id])
+
+  @@index([studentId])
+  @@index([companyId])
+  @@index([status])
+  @@index([severity])
+}
+
+enum ComplianceStatus {
+  ELIGIBLE
+  CONDITIONAL
+  RESTRICTED
+  PLACED
+  DEBARRED
+}
+
+/// An admin override replaces the *computed* compliance status entirely,
+/// until removed. History of overrides lives in AuditLog; this table holds
+/// only the currently-active override, one per student.
+model ComplianceOverride {
+  id        String           @id @default(cuid())
+  studentId String           @unique
+  status    ComplianceStatus
+  reason    String           @db.Text
+  setById   String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────

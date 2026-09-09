@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ApplicationCard } from "./application-card";
 import { ApplicationsFilters } from "./applications-filters";
 import { ApplicationsStats } from "./applications-stats";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw, FileText } from "lucide-react";
@@ -95,15 +95,18 @@ export function MyApplicationsContent({
   const { toast } = useToast();
 
   // Extract current filters from search params
-  const currentFilters = {
-    search: (searchParams.search as string) || "",
-    status: (searchParams.status as string) || "",
-    academicYear: (searchParams.academicYear as string) || "",
-    limit: 20,
-    offset: parseInt((searchParams.offset as string) || "0"),
-  };
+  const currentFilters = useMemo(
+    () => ({
+      search: (searchParams.search as string) || "",
+      status: (searchParams.status as string) || "",
+      academicYear: (searchParams.academicYear as string) || "",
+      limit: 20,
+      offset: parseInt((searchParams.offset as string) || "0"),
+    }),
+    [searchParams]
+  );
 
-  const fetchApplications = async (refresh = false) => {
+  const fetchApplications = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
 
@@ -135,7 +138,7 @@ export function MyApplicationsContent({
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [currentFilters, toast]);
 
   // Update URL with new filters
   const updateFilters = (newFilters: Partial<typeof currentFilters>) => {
@@ -190,7 +193,7 @@ export function MyApplicationsContent({
 
   useEffect(() => {
     fetchApplications();
-  }, [searchParams]);
+  }, [fetchApplications]);
 
   if (loading && !data) {
     return (

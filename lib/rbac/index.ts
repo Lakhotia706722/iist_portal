@@ -36,10 +36,24 @@ export type Permission =
   // Phase 3: Attendance
   | "attendance:read" | "attendance:write"
   // Phase 3: Offers
-  | "offer:read" | "offer:write"
+  | "offer:read" | "offer:read:all" | "offer:write"
   // Phase 3: Misc
-  | "skillup:read" | "skillup:write"
-  | "interview:read" | "interview:write";
+  | "skillup:read" | "skillup:read:all" | "skillup:write"
+  | "interview:read" | "interview:read:all" | "interview:write"
+  // Phase 4
+  | "notification:read:own" | "notification:write:own"
+  | "notification:template:read" | "notification:template:write"
+  | "calendar:read" | "calendar:write"
+  // Phase 5: Policy engine
+  | "policy:read" | "policy:write"
+  // Phase 5: Compliance
+  | "compliance:read:own" | "compliance:read:all" | "compliance:write"
+  | "incident:read" | "incident:write"
+  // Phase 5: AI (self-service, always scoped to the caller's own data)
+  | "ai:use"
+  // Phase 5: Analytics, reports, search, audit
+  | "analytics:read"
+  | "search:read";
 
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   STUDENT: [
@@ -53,7 +67,11 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "company:read", "drive:read", "jobrole:read", "eligibility:read",
     "application:read:own", "application:write:own",
     "offer:read",
-    "skillup:read", "interview:read", "interview:write",
+    // Students read their own SkillUp/interview records; staff record them.
+    "skillup:read", "interview:read",
+    "notification:read:own", "notification:write:own",
+    "calendar:read",
+    "compliance:read:own", "ai:use",
   ],
   FACULTY: [
     "student:read:all",
@@ -63,8 +81,13 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "company:read", "drive:read", "jobrole:read", "eligibility:read",
     "application:read:all",
     "round:read", "attendance:read", "shortlist:read",
-    "offer:read", "report:read",
-    "skillup:read", "interview:read",
+    "offer:read", "offer:read:all", "report:read",
+    "skillup:read", "skillup:read:all", "skillup:write",
+    "interview:read", "interview:read:all", "interview:write",
+    "notification:read:own", "notification:write:own",
+    "calendar:read", "calendar:write",
+    "compliance:read:all", "incident:read",
+    "analytics:read", "search:read",
   ],
   HOD: [
     "student:read:all", "student:write:all",
@@ -78,8 +101,13 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "round:read", "round:write", "round:participant:write",
     "shortlist:read", "shortlist:write",
     "attendance:read", "attendance:write",
-    "offer:read", "offer:write",
-    "skillup:read", "skillup:write", "interview:read",
+    "offer:read", "offer:read:all", "offer:write",
+    "skillup:read", "skillup:read:all", "skillup:write",
+    "interview:read", "interview:read:all", "interview:write",
+    "notification:read:own", "notification:write:own",
+    "calendar:read", "calendar:write",
+    "compliance:read:all", "incident:read", "incident:write",
+    "analytics:read", "search:read",
   ],
   TP_ADMIN: [
     "student:read:all", "student:write:all", "student:debar",
@@ -101,9 +129,16 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "round:read", "round:write", "round:participant:write",
     "shortlist:read", "shortlist:write",
     "attendance:read", "attendance:write",
-    "offer:read", "offer:write",
-    "skillup:read", "skillup:write",
-    "interview:read", "interview:write",
+    "offer:read", "offer:read:all", "offer:write",
+    "skillup:read", "skillup:read:all", "skillup:write",
+    "interview:read", "interview:read:all", "interview:write",
+    "notification:read:own", "notification:write:own",
+    "notification:template:read", "notification:template:write",
+    "calendar:read", "calendar:write",
+    "policy:read", "policy:write",
+    "compliance:read:all", "compliance:write",
+    "incident:read", "incident:write",
+    "analytics:read", "search:read",
   ],
   COMPANY_REP: [
     "company:read",
@@ -111,6 +146,8 @@ const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
     "application:read:all",
     "shortlist:read",
     "offer:read", "offer:write",
+    "notification:read:own", "notification:write:own",
+    "calendar:read",
   ],
 };
 

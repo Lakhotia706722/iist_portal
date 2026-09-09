@@ -6,8 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
-import { listActiveOpportunities } from "@/lib/services/drive.service";
+import { listActiveOpportunities } from "@/server/services/drive.service";
 import { handleApiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {

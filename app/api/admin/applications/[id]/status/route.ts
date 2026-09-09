@@ -6,9 +6,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { applicationStatusSchema } from "@/lib/validations/placement";
-import { updateApplicationStatus } from "@/lib/services/application.service";
+import { updateApplicationStatus } from "@/server/services/application.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -25,7 +25,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "application:status:write");
+    await requirePermission("application:status:write");
 
     const body = await request.json();
     const validatedData = applicationStatusSchema.parse(body);

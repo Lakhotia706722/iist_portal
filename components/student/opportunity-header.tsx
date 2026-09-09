@@ -101,11 +101,14 @@ export function OpportunityHeader({ opportunity }: OpportunityHeaderProps) {
             <div className="flex-shrink-0">
               {opportunity.company.logoUrl ? (
                 <div className="relative h-20 w-20 rounded-xl border bg-white p-2 shadow-sm">
+                  {/* unoptimized: see ARCHITECTURE.md §13 — company.logoUrl's declared
+                      MIME type isn't server-verified against actual bytes. */}
                   <Image
                     src={opportunity.company.logoUrl}
                     alt={`${opportunity.company.name} logo`}
                     fill
                     className="object-contain"
+                    unoptimized
                   />
                 </div>
               ) : (

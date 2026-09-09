@@ -7,10 +7,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { companySchema } from "@/lib/validations/placement";
-import { createCompany, listCompanies, getCompanyStats } from "@/lib/services/company.service";
-import { uploadFile } from "@/lib/storage";
+import { createCompany, listCompanies, getCompanyStats } from "@/server/services/company.service";
+import { getStorageAdapter, buildStorageKey } from "@/lib/storage";
 import { ApiError, handleApiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "company:read");
+    await requirePermission("company:read");
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || undefined;
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "company:write");
+    await requirePermission("company:write");
 
     const formData = await request.formData();
     
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     // Handle logo upload if present
     const logoFile = formData.get("logo") as File | null;
-    let uploadedLogo;
+    let uploadedLogoKey: string | undefined;
 
     if (logoFile && logoFile.size > 0) {
       // Validate file type and size
@@ -100,14 +100,14 @@ export async function POST(request: NextRequest) {
       }
 
       const logoBuffer = await logoFile.arrayBuffer();
-      uploadedLogo = await uploadFile(
+      uploadedLogoKey = await getStorageAdapter().upload(
+        buildStorageKey("company-logos", "shared", logoFile.name),
         Buffer.from(logoBuffer),
-        `company-logos/${Date.now()}-${logoFile.name}`,
         logoFile.type
       );
     }
 
-    const company = await createCompany(validatedData, uploadedLogo?.url);
+    const company = await createCompany(validatedData, uploadedLogoKey);
 
     return NextResponse.json({
       message: "Company created successfully",

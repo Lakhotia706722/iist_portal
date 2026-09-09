@@ -36,6 +36,17 @@ export function errorResponse(error: unknown): Response {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   if (error instanceof ForbiddenError)
     return Response.json({ error: error.message }, { status: 403 });
+  // Errors from lib/errors.ts (NotFoundError, ValidationError, ...) are
+  // identified by name since some call sites import this guard's classes
+  // instead of the shared ones.
+  if (error instanceof Error) {
+    if (error.name === "ValidationError" || error.name === "BadRequestError")
+      return Response.json({ error: error.message }, { status: 400 });
+    if (error.name === "NotFoundError")
+      return Response.json({ error: error.message }, { status: 404 });
+    if (error.name === "ConflictError")
+      return Response.json({ error: error.message }, { status: 409 });
+  }
   console.error(error);
   return Response.json({ error: "Internal server error" }, { status: 500 });
 }

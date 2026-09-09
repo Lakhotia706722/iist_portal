@@ -93,12 +93,30 @@ export function handleApiError(error: unknown): NextResponse {
           error: error.message,
           code: "FORBIDDEN",
         }, { status: 403 });
+
+      case "ConflictError":
+        return NextResponse.json({
+          error: error.message,
+          code: "CONFLICT",
+        }, { status: 409 });
+
+      case "BadRequestError":
+        return NextResponse.json({
+          error: error.message,
+          code: "BAD_REQUEST",
+        }, { status: 400 });
       
       case "UnauthorizedError":
         return NextResponse.json({
           error: error.message,
           code: "UNAUTHORIZED",
         }, { status: 401 });
+
+      case "ServiceUnavailableError":
+        return NextResponse.json({
+          error: error.message,
+          code: "SERVICE_UNAVAILABLE",
+        }, { status: 503 });
     }
   }
 

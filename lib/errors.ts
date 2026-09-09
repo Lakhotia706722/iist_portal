@@ -47,8 +47,16 @@ export class ConflictError extends Error {
 
 export class BadRequestError extends Error {
   name = "BadRequestError";
-  
+
   constructor(message: string = "Bad request") {
+    super(message);
+  }
+}
+
+export class ServiceUnavailableError extends Error {
+  name = "ServiceUnavailableError";
+
+  constructor(message: string = "Service temporarily unavailable") {
     super(message);
   }
 }

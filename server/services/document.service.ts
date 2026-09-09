@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "./audit.service";
 import { getStorageAdapter } from "@/lib/storage";
+import { notify, PlacementNotifications } from "@/lib/notifications";
 import type { DocumentUploadInput, DocumentVerifyInput } from "@/lib/validations/profile";
 
 export async function getDocuments(studentId: string) {
@@ -91,6 +92,27 @@ export async function adminVerifyDocument(
     oldValues: { status: doc.status },
     newValues: { status: data.action, adminNote: data.adminNote },
   });
+
+  // A rejection or re-upload request needs the student to act — tell them.
+  if (data.action === "REJECTED" || data.action === "RE_UPLOAD_REQUESTED") {
+    await PlacementNotifications.documentRequested(
+      updated.studentId,
+      updated.name,
+      data.adminNote || "No reason given — contact the placement cell."
+    );
+  } else if (data.action === "VERIFIED") {
+    await notify({
+      studentId: updated.studentId,
+      subject: `Document verified: ${updated.name}`,
+      message: `Your document "${updated.name}" has been verified.`,
+      channels: ["in_app"],
+      priority: "low",
+      category: "documents",
+      entityType: "document",
+      entityId: id,
+      link: "/student/documents",
+    });
+  }
 
   return updated;
 }

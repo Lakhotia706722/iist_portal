@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Filter, Calendar, Building2, Users, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { DriveForm } from "@/components/admin/drive-form";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Drive {
   id: string;
@@ -97,15 +97,11 @@ export default function DrivesPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchDrives();
-  }, [searchQuery, statusFilter, academicYearFilter]);
-
-  const fetchDrives = async () => {
+  const fetchDrives = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      
+
       if (searchQuery) params.set("search", searchQuery);
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (academicYearFilter !== "all") params.set("academicYear", academicYearFilter);
@@ -125,7 +121,11 @@ export default function DrivesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, statusFilter, academicYearFilter, toast]);
+
+  useEffect(() => {
+    fetchDrives();
+  }, [fetchDrives]);
 
   const handleCreateDrive = () => {
     setShowCreateDialog(true);

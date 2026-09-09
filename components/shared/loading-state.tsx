@@ -1,4 +1,4 @@
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { cn } from "@/lib/utils";
 
 interface LoadingStateProps {
@@ -20,7 +20,7 @@ export function LoadingState({
         className
       )}
     >
-      <Spinner className="h-8 w-8" />
+      <LoadingSpinner className="h-8 w-8" />
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
   );

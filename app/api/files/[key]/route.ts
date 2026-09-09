@@ -1,48 +1,49 @@
 import { NextRequest } from "next/server";
-import { requireAuth, errorResponse } from "@/lib/rbac/server-guard";
-import fs from "fs/promises";
 import path from "path";
+import { requireAuth, errorResponse } from "@/lib/rbac/server-guard";
+import { getStorageAdapter } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Serves locally stored files with auth gate.
+ * Serves stored files with an auth gate.
  * The key is URL-encoded (e.g. "documents/studentId/uuid-file.pdf").
- * In S3 mode this route is not needed — the signed URLs go directly to S3.
+ * In S3 mode this route is not needed — signed URLs go directly to S3.
+ *
+ * Bytes come from the storage adapter; path-traversal is refused by the
+ * adapter itself so no filesystem access happens here.
  */
-export async function GET(_req: NextRequest, { params }: { params: { key: string } }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { key: string } }
+) {
   try {
     await requireAuth();
 
     const key = decodeURIComponent(params.key);
-
-    // Prevent path traversal
-    const basePath = process.env.LOCAL_STORAGE_PATH ?? "./uploads";
-    const absBase = path.resolve(basePath);
-    const absFile = path.resolve(path.join(basePath, key));
-
-    if (!absFile.startsWith(absBase + path.sep) && absFile !== absBase) {
-      return new Response("Forbidden", { status: 403 });
-    }
+    const storage = getStorageAdapter();
 
     let buffer: Buffer;
     try {
-      buffer = await fs.readFile(absFile);
-    } catch {
+      buffer = await storage.download(key);
+    } catch (err) {
+      if ((err as Error).message?.includes("path traversal")) {
+        return new Response("Forbidden", { status: 403 });
+      }
       return new Response("Not Found", { status: 404 });
     }
 
     // Infer MIME type from extension
-    const ext = path.extname(absFile).toLowerCase();
+    const ext = path.extname(key).toLowerCase();
     const mimeMap: Record<string, string> = {
-      ".pdf":  "application/pdf",
-      ".jpg":  "image/jpeg",
+      ".pdf": "application/pdf",
+      ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
-      ".png":  "image/png",
+      ".png": "image/png",
       ".webp": "image/webp",
-      ".mp4":  "video/mp4",
+      ".mp4": "video/mp4",
       ".webm": "video/webm",
-      ".mov":  "video/quicktime",
+      ".mov": "video/quicktime",
     };
     const contentType = mimeMap[ext] ?? "application/octet-stream";
 

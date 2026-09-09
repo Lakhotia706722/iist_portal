@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OpportunityCard } from "./opportunity-card";
 import { OpportunitiesFilters } from "./opportunities-filters";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw } from "lucide-react";
@@ -67,15 +67,18 @@ export function OpportunitiesContent({
   const { toast } = useToast();
 
   // Extract current filters from search params
-  const currentFilters = {
-    search: (searchParams.search as string) || "",
-    industry: (searchParams.industry as string) || "",
-    workMode: (searchParams.workMode as string) || "",
-    limit: 20,
-    offset: parseInt((searchParams.offset as string) || "0"),
-  };
+  const currentFilters = useMemo(
+    () => ({
+      search: (searchParams.search as string) || "",
+      industry: (searchParams.industry as string) || "",
+      workMode: (searchParams.workMode as string) || "",
+      limit: 20,
+      offset: parseInt((searchParams.offset as string) || "0"),
+    }),
+    [searchParams]
+  );
 
-  const fetchOpportunities = async (refresh = false) => {
+  const fetchOpportunities = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
     else setLoading(true);
 
@@ -88,7 +91,7 @@ export function OpportunitiesContent({
       queryParams.set("offset", currentFilters.offset.toString());
 
       const response = await fetch(`/api/student/opportunities?${queryParams.toString()}`);
-      
+
       if (!response.ok) {
         throw new Error(await response.text());
       }
@@ -107,7 +110,7 @@ export function OpportunitiesContent({
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [currentFilters, toast]);
 
   // Update URL with new filters
   const updateFilters = (newFilters: Partial<typeof currentFilters>) => {
@@ -131,7 +134,7 @@ export function OpportunitiesContent({
 
   useEffect(() => {
     fetchOpportunities();
-  }, [searchParams]);
+  }, [fetchOpportunities]);
 
   // Auto-refresh every 30 seconds to keep countdown timers accurate
   useEffect(() => {
@@ -142,7 +145,7 @@ export function OpportunitiesContent({
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [loading, refreshing]);
+  }, [loading, refreshing, fetchOpportunities]);
 
   if (loading && !data) {
     return (

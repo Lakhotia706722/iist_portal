@@ -8,14 +8,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { driveSchema, driveStatusSchema } from "@/lib/validations/placement";
 import { 
   getDriveById, 
   updateDrive, 
   deleteDrive, 
   updateDriveStatus 
-} from "@/lib/services/drive.service";
+} from "@/server/services/drive.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -32,7 +32,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "drive:read");
+    await requirePermission("drive:read");
 
     const drive = await getDriveById(params.id);
 
@@ -58,12 +58,12 @@ export async function PUT(
 
     // Handle status update
     if (action === "update-status") {
-      await checkPermission(session.user.id, "drive:publish");
+      const actor = await requirePermission("drive:publish");
       
       const body = await request.json();
       const { status } = driveStatusSchema.parse(body);
 
-      const drive = await updateDriveStatus(params.id, status);
+      const drive = await updateDriveStatus(params.id, status, actor.id as string);
 
       return NextResponse.json({
         message: `Drive status updated to ${status}`,
@@ -72,12 +72,12 @@ export async function PUT(
     }
 
     // Handle regular update
-    await checkPermission(session.user.id, "drive:write");
+    const actor = await requirePermission("drive:write");
 
     const body = await request.json();
     const validatedData = driveSchema.partial().parse(body);
 
-    const drive = await updateDrive(params.id, validatedData);
+    const drive = await updateDrive(params.id, validatedData, actor.id as string);
 
     return NextResponse.json({
       message: "Drive updated successfully",
@@ -99,9 +99,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "drive:write");
+    const actor = await requirePermission("drive:write");
 
-    await deleteDrive(params.id);
+    await deleteDrive(params.id, actor.id as string);
 
     return NextResponse.json({
       message: "Drive deleted successfully",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, ChevronDown, ChevronUp,
@@ -45,17 +45,6 @@ const ROUND_TYPES = ["APTITUDE", "TECHNICAL", "GROUP_DISCUSSION", "HR", "CASE_ST
 const ROUND_MODES = ["ONLINE", "OFFLINE", "HYBRID"];
 const RESULT_OPTIONS = ["PASSED", "FAILED", "ON_HOLD"];
 const ATTENDANCE_OPTIONS = ["PRESENT", "ABSENT", "EXEMPTED"];
-
-const RESULT_CLS: Record<string, string> = {
-  PASSED:  "bg-green-50 text-green-700",
-  FAILED:  "bg-red-50 text-red-700",
-  ON_HOLD: "bg-amber-50 text-amber-700",
-};
-const ATTENDANCE_CLS: Record<string, string> = {
-  PRESENT:  "bg-green-50 text-green-700",
-  ABSENT:   "bg-red-50 text-red-700",
-  EXEMPTED: "bg-gray-50 text-gray-600",
-};
 
 /* ── round form ───────────────────────────────────────── */
 function RoundForm({
@@ -200,7 +189,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
 
   const canEdit = ["APPLICATIONS_CLOSED", "ONGOING", "SHORTLISTING"].includes(driveStatus);
 
-  const fetchRounds = async () => {
+  const fetchRounds = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/drives/${driveId}/rounds`);
@@ -212,7 +201,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [driveId, toast]);
 
   const fetchParticipants = async (roundId: string) => {
     setLoadingParticipants(p => new Set([...p, roundId]));
@@ -228,7 +217,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
     }
   };
 
-  useEffect(() => { fetchRounds(); }, [driveId]);
+  useEffect(() => { fetchRounds(); }, [fetchRounds]);
 
   const toggleExpand = (roundId: string) => {
     if (expandedRound === roundId) {

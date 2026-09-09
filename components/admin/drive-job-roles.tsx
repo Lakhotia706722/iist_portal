@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Target, Edit, Trash2, Users, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface JobRole {
   id: string;
@@ -59,11 +59,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchJobRoles();
-  }, [driveId]);
-
-  const fetchJobRoles = async () => {
+  const fetchJobRoles = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/drives/${driveId}/roles`);
@@ -81,7 +77,11 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [driveId, toast]);
+
+  useEffect(() => {
+    fetchJobRoles();
+  }, [fetchJobRoles]);
 
   const canEdit = !["ONGOING", "COMPLETED", "CANCELLED"].includes(driveStatus);
 

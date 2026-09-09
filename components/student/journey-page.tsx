@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { JourneyTracker, buildJourneySteps } from "./journey-tracker";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -115,7 +115,7 @@ export function JourneyPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [toast]);
 
   const toggle = (id: string) =>
     setExpanded(prev => {
@@ -163,8 +163,10 @@ export function JourneyPage() {
                 {/* Logo */}
                 {app.jobRole.drive.company.logoUrl ? (
                   <div className="relative h-12 w-12 shrink-0 rounded-lg border bg-white overflow-hidden">
+                    {/* unoptimized: see ARCHITECTURE.md §13 — company.logoUrl's declared
+                        MIME type isn't server-verified against actual bytes. */}
                     <Image src={app.jobRole.drive.company.logoUrl}
-                      alt={app.jobRole.drive.company.name} fill className="object-contain p-1" />
+                      alt={app.jobRole.drive.company.name} fill className="object-contain p-1" unoptimized />
                   </div>
                 ) : (
                   <div className="h-12 w-12 shrink-0 rounded-lg border bg-muted flex items-center justify-center">

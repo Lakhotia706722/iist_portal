@@ -3,8 +3,7 @@ import { requireRole, errorResponse } from "@/lib/rbac/server-guard";
 import { prisma } from "@/lib/prisma";
 import { projectSchema } from "@/lib/validations/profile";
 import { updateProject, deleteProject } from "@/server/services/project.service";
-import { getStorageAdapter } from "@/lib/storage";
-import { randomUUID } from "crypto";
+import { uploadFile } from "../../_helpers";
 
 async function getStudentId(userId: string) {
   const s = await prisma.student.findUniqueOrThrow({ where: { userId }, select: { id: true } });
@@ -25,9 +24,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       body = JSON.parse(formData.get("data") as string);
       const file = formData.get("image") as File | null;
       if (file) {
-        const buffer = Buffer.from(await file.arrayBuffer());
-        imageKey = `projects/${studentId}/${randomUUID()}-${file.name}`;
-        await getStorageAdapter().upload(imageKey, buffer, file.type);
+        imageKey = await uploadFile(file, "projects", studentId, {
+          allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
+          maxBytes: 5 * 1024 * 1024, // 5 MB
+        });
       }
     } else {
       body = await req.json();

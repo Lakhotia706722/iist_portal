@@ -10,6 +10,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getPolicyValue } from "@/server/services/policy.service";
+import type { ApplicationStatus } from "@prisma/client";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -33,19 +35,18 @@ export async function evaluateEligibility(
   jobRoleId:  string,
 ): Promise<EligibilityResult> {
   // Load student with all needed sub-relations in one query
-  const [student, rules] = await Promise.all([
+  const [studentBase, rules] = await Promise.all([
     prisma.student.findUniqueOrThrow({
       where: { id: studentId },
       include: {
         batch:  { include: { branch: { include: { course: true } } } },
         academicRecord: true,
-        applications: {
-          where: {
-            status: {
-              in: ["SELECTED"],
-            },
+        // Phase 4: SkillUp scores are evaluated from real TestResult rows.
+        testResults: {
+          select: {
+            percentage: true,
+            test: { select: { testType: { select: { slug: true } } } },
           },
-          select: { id: true },
         },
       },
     }),
@@ -54,6 +55,27 @@ export async function evaluateEligibility(
       orderBy: { createdAt: "asc" },
     }),
   ]);
+
+  // Phase 5: which statuses count as "already placed" is a policy value
+  // (batch-overridable), not a hardcoded ["SELECTED"] filter.
+  const placedStatusesRaw = await getPolicyValue<string>(
+    "already_placed_statuses",
+    studentBase.batchId ?? null
+  );
+  const placedStatuses = placedStatusesRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean) as ApplicationStatus[];
+
+  const placedApplications =
+    placedStatuses.length > 0
+      ? await prisma.application.findMany({
+          where: { studentId, status: { in: placedStatuses } },
+          select: { id: true },
+        })
+      : [];
+
+  const student = { ...studentBase, applications: placedApplications };
 
   if (rules.length === 0) {
     // No rules → open to all eligible students
@@ -242,6 +264,42 @@ function evaluateRule(
           reason: passed
             ? `Placement status eligibility met`
             : `Already placed — not eligible to apply for further drives`,
+        };
+      }
+
+      case "SKILLUP_SCORE": {
+        // value is "<percentage>" (all tests) or "<typeSlug>:<percentage>"
+        const raw = String(rule.value);
+        const [maybeSlug, maybePct] = raw.includes(":") ? raw.split(":") : [null, raw];
+        const threshold = parseFloat(maybePct);
+
+        const results: Array<{ percentage: number; test: { testType: { slug: string } } }> =
+          student.testResults ?? [];
+        const scoped = maybeSlug
+          ? results.filter((r) => r.test.testType.slug === maybeSlug)
+          : results;
+
+        if (scoped.length === 0) {
+          return {
+            ...base,
+            passed: false,
+            reason: maybeSlug
+              ? `No ${maybeSlug} SkillUp results on record yet`
+              : `No SkillUp results on record yet`,
+          };
+        }
+
+        const average =
+          scoped.reduce((sum, r) => sum + r.percentage, 0) / scoped.length;
+        const passed = compare(average, rule.operator, threshold);
+        const label = maybeSlug ? `${maybeSlug} SkillUp average` : "SkillUp average";
+
+        return {
+          ...base,
+          passed,
+          reason: passed
+            ? `${label} ${average.toFixed(1)}% meets the required ${humanOp(rule.operator)} ${threshold}%`
+            : `${label} is ${average.toFixed(1)}%, requirement is ${humanOp(rule.operator)} ${threshold}%`,
         };
       }
 

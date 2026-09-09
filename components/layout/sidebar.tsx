@@ -11,6 +11,8 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   badge?: string | number;
+  /** Route not built yet — rendered as a disabled "Soon" item, never a dead link. */
+  comingSoon?: boolean;
 }
 
 export interface NavGroup {
@@ -69,6 +71,36 @@ export function Sidebar({ navGroups }: SidebarProps) {
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
+
+                if (item.comingSoon) {
+                  return (
+                    <li key={item.href}>
+                      <span
+                        aria-disabled="true"
+                        title={
+                          collapsed
+                            ? `${item.label} — coming soon`
+                            : "Coming soon"
+                        }
+                        className={cn(
+                          "flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-sidebar-foreground/35",
+                          collapsed && "justify-center px-0"
+                        )}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1 truncate">{item.label}</span>
+                            <span className="ml-auto rounded-full border border-sidebar-foreground/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide">
+                              Soon
+                            </span>
+                          </>
+                        )}
+                      </span>
+                    </li>
+                  );
+                }
+
                 const active =
                   item.href === "/dashboard"
                     ? pathname === item.href

@@ -5,8 +5,12 @@ import { sendEmail } from "@/lib/email";
 import { randomBytes } from "crypto";
 import { render } from "@react-email/components";
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const limit = checkRateLimit(req, { bucket: "forgot-password", limit: 5, windowMs: 60_000 });
+  if (!limit.allowed) return rateLimitedResponse(limit);
+
   try {
     const body = await req.json();
     const parsed = forgotPasswordSchema.safeParse(body);
