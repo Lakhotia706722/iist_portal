@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { PlacementNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
 import { writeAuditLog } from "./audit.service";
+import { getStorageAdapter } from "@/lib/storage";
 
 export type ShortlistableApplication = {
   id: string;
@@ -19,9 +20,9 @@ export type ShortlistableApplication = {
   student: {
     id: string;
     enrollmentNumber: string;
-    firstName: string;
-    lastName: string;
-    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    user: { email: string };
     batch: {
       academicYear: string;
       branch: {
@@ -46,6 +47,7 @@ export type ShortlistableApplication = {
   };
   resumeVersion: {
     fileKey: string | null;
+    fileUrl: string | null;
   } | null;
 };
 
@@ -152,11 +154,33 @@ export async function listShortlistableApplications(
   const [applications, total, statusStats, roleStats, branchApplications] = await Promise.all([
     prisma.application.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        status: true,
+        appliedAt: true,
         student: {
-          include: {
-            batch: { include: { branch: true } },
-            academicRecord: true,
+          select: {
+            id: true,
+            enrollmentNumber: true,
+            firstName: true,
+            lastName: true,
+            user: { select: { email: true } },
+            batch: {
+              select: {
+                academicYear: true,
+                branch: { select: { code: true, name: true } },
+              },
+            },
+            academicRecord: {
+              select: {
+                currentCgpa: true,
+                currentSemester: true,
+                activeBacklogs: true,
+                totalBacklogs: true,
+                tenthPercentage: true,
+                twelfthPercentage: true,
+              },
+            },
           },
         },
         jobRole: {
@@ -217,8 +241,21 @@ export async function listShortlistableApplications(
     ? cgpaValues.reduce((sum, cgpa) => sum + cgpa, 0) / cgpaValues.length
     : 0;
 
+  const storage = getStorageAdapter();
+  const applicationsWithResumeUrls: ShortlistableApplication[] = await Promise.all(
+    applications.map(async (app) => ({
+      ...app,
+      resumeVersion: app.resumeVersion
+        ? {
+            fileKey: app.resumeVersion.fileKey,
+            fileUrl: app.resumeVersion.fileKey ? await storage.getSignedUrl(app.resumeVersion.fileKey) : null,
+          }
+        : null,
+    }))
+  );
+
   return {
-    applications: applications as unknown as ShortlistableApplication[],
+    applications: applicationsWithResumeUrls,
     total,
     stats: {
       byStatus: statusStats.reduce(
@@ -539,7 +576,7 @@ export async function exportShortlistData(
   const exportData = applications.map(app => ({
     enrollmentNumber: app.student.enrollmentNumber,
     name: `${app.student.firstName} ${app.student.lastName}`,
-    email: app.student.email,
+    email: app.student.user.email,
     branch: app.student.batch.branch.code,
     batch: app.student.batch.academicYear,
     cgpa: app.student.academicRecord?.currentCgpa || null,

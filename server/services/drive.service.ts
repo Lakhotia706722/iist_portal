@@ -492,6 +492,12 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
       value: string;
     }>;
   }>;
+  contactInfo: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    designation: string | null;
+  };
 }> {
   const drive = await prisma.placementDrive.findUnique({
     where: { 
@@ -533,7 +539,23 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
     throw new NotFoundError("Opportunity not found or not available");
   }
 
-  return drive as any;
+  // The frontend (opportunity-detail-content.tsx) expects a nested
+  // `contactInfo` object — PlacementDrive stores these as flat scalar
+  // fields (pointOfContact/pocEmail/pocPhone), so they must be reshaped
+  // here rather than returned raw. The previous `return drive as any`
+  // hid this mismatch from tsc entirely and crashed the page on every
+  // single opportunity (TypeError: Cannot read properties of undefined
+  // (reading 'name')) — found via Phase 9's real-browser verification,
+  // not by the type checker or an API-level check.
+  return {
+    ...drive,
+    contactInfo: {
+      name: drive.pointOfContact,
+      email: drive.pocEmail,
+      phone: drive.pocPhone,
+      designation: null, // no such field on PlacementDrive
+    },
+  };
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────

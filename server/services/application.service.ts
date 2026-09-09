@@ -16,6 +16,7 @@ import { writeAuditLog } from "./audit.service";
 import { PlacementNotifications, AdminNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
 import { getPolicyValue } from "./policy.service";
+import { getStorageAdapter } from "@/lib/storage";
 
 export type ApplicationWithDetails = {
   id: string;
@@ -76,9 +77,31 @@ export type StudentApplicationSummary = {
     ctcMin: number | null;
     ctcMax: number | null;
   };
-  company: { name: string; logoKey: string | null };
+  company: { name: string; logoKey: string | null; logoUrl: string | null };
   drive: { title: string; status: string };
   currentRound?: { title: string; scheduledAt: Date | null };
+  /** Full status-change timeline — feeds the student Journey Tracker. */
+  statusHistory: Array<{
+    id: string;
+    fromStatus: string | null;
+    toStatus: string;
+    changedAt: Date;
+    changedBy: string | null;
+    reason: string | null;
+  }>;
+  /** Round-by-round participation — also feeds the Journey Tracker. */
+  rounds: Array<{
+    id: string;
+    title: string;
+    type: string;
+    scheduledAt: Date | null;
+    participant: {
+      status: string | null;
+      result: string | null;
+      feedback: string | null;
+      attendanceStatus: string | null;
+    } | null;
+  }>;
 };
 
 // Shared application include
@@ -361,6 +384,19 @@ export async function listStudentApplications(
             },
           },
         },
+        statusHistory: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, fromStatus: true, toStatus: true, createdAt: true, note: true, changedById: true },
+        },
+        roundParticipations: {
+          select: {
+            result: true,
+            remarks: true,
+            attendance: { select: { status: true } },
+            round: { select: { id: true, title: true, type: true, scheduledAt: true } },
+          },
+          orderBy: { round: { roundNumber: "asc" } },
+        },
       },
       orderBy: { appliedAt: "desc" },
       skip: filters?.offset || 0,
@@ -369,15 +405,49 @@ export async function listStudentApplications(
     prisma.application.count({ where }),
   ]);
 
+  const storage = getStorageAdapter();
+
   return {
-    applications: applications.map(app => ({
-      id: app.id,
-      status: app.status,
-      appliedAt: app.appliedAt,
-      jobRole: app.jobRole,
-      company: app.jobRole.drive.company,
-      drive: { title: app.jobRole.drive.title, status: app.jobRole.drive.status },
-    })),
+    applications: await Promise.all(
+      applications.map(async app => ({
+        id: app.id,
+        status: app.status,
+        appliedAt: app.appliedAt,
+        jobRole: app.jobRole,
+        company: {
+          name: app.jobRole.drive.company.name,
+          logoKey: app.jobRole.drive.company.logoKey,
+          logoUrl: app.jobRole.drive.company.logoKey
+            ? await storage.getSignedUrl(app.jobRole.drive.company.logoKey)
+            : null,
+        },
+        drive: { title: app.jobRole.drive.title, status: app.jobRole.drive.status },
+        statusHistory: app.statusHistory.map(h => ({
+          id: h.id,
+          fromStatus: h.fromStatus,
+          toStatus: h.toStatus,
+          changedAt: h.createdAt,
+          changedBy: h.changedById,
+          reason: h.note,
+        })),
+        rounds: app.roundParticipations.map(rp => ({
+          id: rp.round.id,
+          title: rp.round.title,
+          type: rp.round.type,
+          scheduledAt: rp.round.scheduledAt,
+          participant: {
+            // `status` and `attendanceStatus` are deliberately the same
+            // value — the two frontend consumers (journey-tracker.tsx,
+            // journey-page.tsx) each independently declared both field
+            // names for what is really one signal (attendance status).
+            status: rp.attendance?.status ?? null,
+            result: rp.result,
+            feedback: rp.remarks,
+            attendanceStatus: rp.attendance?.status ?? null,
+          },
+        })),
+      }))
+    ),
     total,
   };
 }

@@ -35,12 +35,23 @@ interface EligibilityResult {
   }>;
 }
 
+// Matches GET /api/student/resumes' real shape (see resume.service.ts's
+// getResumes() and resume-center-client.tsx's ResumeItem) — a Resume with
+// its single latest ResumeVersion, not a flat filename/fileUrl/uploadedAt
+// object. What actually gets submitted to POST /api/student/applications
+// as `resumeVersionId` must be a ResumeVersion id, not the Resume's own id
+// — the backend validates this and rejects anything else.
+interface ResumeVersionSummary {
+  id: string;
+  fileKey: string | null;
+  createdAt: string;
+}
 interface Resume {
   id: string;
-  filename: string;
-  fileUrl: string;
-  uploadedAt: string;
+  name: string;
   isDefault: boolean;
+  updatedAt: string;
+  versions: ResumeVersionSummary[];
 }
 
 interface ApplicationFlowProps {
@@ -73,11 +84,14 @@ export function ApplicationFlow({
       const response = await fetch("/api/student/resumes");
       if (!response.ok) throw new Error("Failed to fetch resumes");
 
-      const data = await response.json();
-      setResumes(data.resumes || []);
+      // GET /api/student/resumes returns the array directly (see
+      // resume-center-client.tsx / ai-resume-builder-client.tsx for the
+      // same contract) — not wrapped in a { resumes: [...] } object.
+      const data: Resume[] = await response.json();
+      setResumes(data);
 
-      // Auto-select default resume if available
-      const defaultResume = data.resumes?.find((r: Resume) => r.isDefault);
+      // Auto-select the default resume, if it actually has a version to submit.
+      const defaultResume = data.find((r) => r.isDefault && r.versions.length > 0);
       if (defaultResume) {
         setSelectedResumeId(defaultResume.id);
       }
@@ -101,7 +115,11 @@ export function ApplicationFlow({
   }, [currentStep, fetchResumes]);
 
   const handleSubmitApplication = async () => {
-    if (!selectedResumeId) {
+    // The backend needs a ResumeVersion id, not the Resume id the cards are
+    // selected by — resolve the selected Resume's latest version here,
+    // once, right before submitting.
+    const resumeVersionId = selectedResume?.versions[0]?.id;
+    if (!resumeVersionId) {
       toast({
         title: "Resume Required",
         description: "Please select a resume before submitting your application.",
@@ -119,7 +137,7 @@ export function ApplicationFlow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobRoleId,
-          resumeVersionId: selectedResumeId,
+          resumeVersionId,
           confirmed: true,
         }),
       });
@@ -149,7 +167,8 @@ export function ApplicationFlow({
   };
 
   const canProceedFromEligibility = eligibility.eligible;
-  const canProceedFromResume = selectedResumeId !== null;
+  const selectedResume = resumes.find((r) => r.id === selectedResumeId);
+  const canProceedFromResume = !!selectedResume && selectedResume.versions.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -317,13 +336,15 @@ export function ApplicationFlow({
                           <FileText className="h-5 w-5 text-muted-foreground" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="font-medium truncate">{resume.filename}</p>
+                              <p className="font-medium truncate">{resume.name}</p>
                               {resume.isDefault && (
                                 <Badge variant="secondary" className="text-xs">Default</Badge>
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              Uploaded on {new Date(resume.uploadedAt).toLocaleDateString()}
+                              {resume.versions.length > 0
+                                ? `Last updated ${new Date(resume.updatedAt).toLocaleDateString()}`
+                                : "No version uploaded yet — can't be submitted"}
                             </p>
                           </div>
                           {selectedResumeId === resume.id && (
@@ -379,7 +400,7 @@ export function ApplicationFlow({
                   <div>
                     <p className="text-sm text-muted-foreground">Selected Resume</p>
                     <p className="font-medium">
-                      {resumes.find(r => r.id === selectedResumeId)?.filename}
+                      {selectedResume?.name}
                     </p>
                   </div>
 

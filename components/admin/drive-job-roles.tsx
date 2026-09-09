@@ -21,6 +21,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { JobRoleForm } from "@/components/admin/job-role-form";
 
 interface JobRole {
   id: string;
@@ -56,7 +58,10 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  
+  const [editingRole, setEditingRole] = useState<JobRole | null>(null);
+  const [deletingRole, setDeletingRole] = useState<JobRole | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const { toast } = useToast();
 
   const fetchJobRoles = useCallback(async () => {
@@ -84,6 +89,29 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   }, [fetchJobRoles]);
 
   const canEdit = !["ONGOING", "COMPLETED", "CANCELLED"].includes(driveStatus);
+
+  const handleDelete = async () => {
+    if (!deletingRole) return;
+    try {
+      setDeleting(true);
+      const res = await fetch(`/api/admin/drives/${driveId}/roles/${deletingRole.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to delete job role");
+      }
+      toast({ title: "Success", description: "Job role deleted" });
+      setDeletingRole(null);
+      fetchJobRoles();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete job role",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const formatSalary = (min: number | null, max: number | null) => {
     if (!min && !max) return "Not specified";
@@ -166,11 +194,11 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
                   
                   {canEdit && (
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" className="gap-1">
+                      <Button variant="outline" size="sm" className="gap-1" onClick={() => setEditingRole(role)}>
                         <Edit className="h-4 w-4" />
                         Edit
                       </Button>
-                      <Button variant="outline" size="sm" className="gap-1">
+                      <Button variant="outline" size="sm" className="gap-1" onClick={() => setDeletingRole(role)}>
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
@@ -242,11 +270,42 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
               Create a new job role for this placement drive.
             </DialogDescription>
           </DialogHeader>
-          <div className="p-4">
-            <p className="text-muted-foreground">Job role form will be implemented here...</p>
-          </div>
+          <JobRoleForm
+            driveId={driveId}
+            onSuccess={() => { setShowCreateDialog(false); fetchJobRoles(); }}
+            onCancel={() => setShowCreateDialog(false)}
+          />
         </DialogContent>
       </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Job Role</DialogTitle>
+            <DialogDescription>Update this role&apos;s details.</DialogDescription>
+          </DialogHeader>
+          {editingRole && (
+            <JobRoleForm
+              driveId={driveId}
+              role={editingRole}
+              onSuccess={() => { setEditingRole(null); fetchJobRoles(); }}
+              onCancel={() => setEditingRole(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={!!deletingRole}
+        onOpenChange={(open) => !open && setDeletingRole(null)}
+        title="Delete job role?"
+        description={`This will permanently delete "${deletingRole?.title}". Applications already submitted against it are not affected, but no one can apply to it going forward.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        loading={deleting}
+      />
     </div>
   );
 }

@@ -19,11 +19,12 @@ import { cn } from "@/lib/utils";
 /* ── types ────────────────────────────────────────────── */
 interface Round {
   id: string;
+  roundNumber: number;
   title: string;
   type: string;
   mode: string;
   scheduledAt: string | null;
-  durationMinutes: number | null;
+  durationMins: number | null;
   venue: string | null;
   instructions: string | null;
   participantCount?: number;
@@ -41,25 +42,40 @@ interface Participant {
 
 interface Props { driveId: string; driveStatus: string }
 
-const ROUND_TYPES = ["APTITUDE", "TECHNICAL", "GROUP_DISCUSSION", "HR", "CASE_STUDY", "ASSIGNMENT", "OTHER"];
+// Must match RoundType / ApplicationStatus enums in prisma/schema.prisma —
+// this list previously used invented values ("APTITUDE", "TECHNICAL", "HR",
+// "CASE_STUDY", "ASSIGNMENT") that never matched RoundType, so selecting
+// most of them and saving would 400.
+const ROUND_TYPES = [
+  "WRITTEN_TEST", "APTITUDE_TEST", "CODING_TEST", "TECHNICAL_INTERVIEW",
+  "HR_INTERVIEW", "GROUP_DISCUSSION", "PRESENTATION", "MEDICAL",
+  "DOCUMENT_VERIFICATION", "OTHER",
+];
 const ROUND_MODES = ["ONLINE", "OFFLINE", "HYBRID"];
-const RESULT_OPTIONS = ["PASSED", "FAILED", "ON_HOLD"];
-const ATTENDANCE_OPTIONS = ["PRESENT", "ABSENT", "EXEMPTED"];
+// participantResultSchema's real enum is PASS/FAIL/PENDING/HOLD, not
+// PASSED/FAILED/ON_HOLD.
+const RESULT_OPTIONS = ["PASS", "FAIL", "PENDING", "HOLD"];
+// AttendanceStatus enum is PRESENT/ABSENT/LATE/EXCUSED — "EXEMPTED" was
+// never a real value and "LATE" was missing.
+const ATTENDANCE_OPTIONS = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 
 /* ── round form ───────────────────────────────────────── */
 function RoundForm({
   initial, onSave, onCancel,
 }: {
   initial?: Partial<Round>;
-  onSave: (data: Omit<Round, "id" | "participantCount">) => void;
+  onSave: (data: {
+    title: string; type: string; mode: string;
+    scheduledAt?: string; durationMins?: number; venue?: string; instructions?: string;
+  }) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     title: initial?.title ?? "",
-    type: initial?.type ?? "TECHNICAL",
+    type: initial?.type ?? "TECHNICAL_INTERVIEW",
     mode: initial?.mode ?? "OFFLINE",
     scheduledAt: initial?.scheduledAt?.slice(0, 16) ?? "",
-    durationMinutes: initial?.durationMinutes?.toString() ?? "",
+    durationMins: initial?.durationMins?.toString() ?? "",
     venue: initial?.venue ?? "",
     instructions: initial?.instructions ?? "",
   });
@@ -99,7 +115,7 @@ function RoundForm({
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Duration (minutes)</label>
-            <Input type="number" value={form.durationMinutes} onChange={set("durationMinutes")} placeholder="60" />
+            <Input type="number" value={form.durationMins} onChange={set("durationMins")} placeholder="60" />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Venue / Link</label>
@@ -119,9 +135,13 @@ function RoundForm({
           <Button size="sm" disabled={!form.title}
             onClick={() => onSave({
               title: form.title, type: form.type, mode: form.mode,
-              scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
-              durationMinutes: form.durationMinutes ? parseInt(form.durationMinutes) : null,
-              venue: form.venue || null, instructions: form.instructions || null,
+              // roundSchema's optional fields accept undefined or "" — not
+              // null. Sending null (the previous behavior) always 400'd
+              // for any round with an empty optional field, i.e. every
+              // round that didn't fill in every single field.
+              scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : undefined,
+              durationMins: form.durationMins ? parseInt(form.durationMins) : undefined,
+              venue: form.venue || undefined, instructions: form.instructions || undefined,
             })}>
             Save Round
           </Button>
@@ -228,15 +248,25 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
     }
   };
 
-  const saveRound = async (data: Omit<Round, "id" | "participantCount">) => {
+  const saveRound = async (data: {
+    title: string; type: string; mode: string;
+    scheduledAt?: string; durationMins?: number; venue?: string; instructions?: string;
+  }) => {
     try {
       const url = editingRound
         ? `/api/admin/rounds/${editingRound.id}`
         : `/api/admin/drives/${driveId}/rounds`;
+      // roundSchema requires roundNumber (unique per drive) — preserve it
+      // on edit, assign the next available one on create. This was never
+      // sent before, so every round creation 400'd.
+      const payload = {
+        ...data,
+        roundNumber: editingRound?.roundNumber ?? rounds.length + 1,
+      };
       const res = await fetch(url, {
         method: editingRound ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
       toast({ title: editingRound ? "Round updated" : "Round created" });
@@ -299,7 +329,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
 
       {rounds.length === 0 ? (
         <EmptyState
-          icon="users"
+          icon={Users}
           title="No rounds yet"
           description={canEdit ? "Create the first selection round for this drive." : "Rounds can be added once applications close."}
           action={canEdit ? { label: "Add First Round", onClick: () => setShowForm(true) } : undefined}
@@ -344,7 +374,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
                                 })}
                               </span>
                             )}
-                            {round.durationMinutes && <span>{round.durationMinutes} min</span>}
+                            {round.durationMins && <span>{round.durationMins} min</span>}
                             {round.venue && <span>{round.venue}</span>}
                             {round.participantCount !== undefined && (
                               <span className="flex items-center gap-1">

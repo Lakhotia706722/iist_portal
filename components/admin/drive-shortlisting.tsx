@@ -25,13 +25,13 @@ interface Applicant {
   student: {
     id: string;
     enrollmentNumber: string;
-    user: { name: string; email: string };
-    branch: { name: string; code: string };
-    batch: { academicYear: string };
+    firstName: string | null;
+    lastName: string | null;
+    batch: { academicYear: string; branch: { name: string; code: string } };
     academicRecord: { currentCgpa: number | null } | null;
   };
   jobRole: { id: string; title: string };
-  resumeVersion: { filename: string; fileUrl: string } | null;
+  resumeVersion: { fileKey: string | null; fileUrl: string | null } | null;
 }
 
 interface Props { driveId: string }
@@ -41,6 +41,10 @@ const STATUS_OPTIONS = [
   { value: "SHORTLISTED", label: "Shortlisted" },
   { value: "REJECTED",    label: "Rejected" },
 ];
+
+function studentName(student: Applicant["student"]): string {
+  return [student.firstName, student.lastName].filter(Boolean).join(" ") || student.enrollmentNumber;
+}
 
 export function DriveShortlisting({ driveId }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
@@ -93,7 +97,7 @@ export function DriveShortlisting({ driveId }: Props) {
       if (search) {
         const q = search.toLowerCase();
         return (
-          a.student.user.name.toLowerCase().includes(q) ||
+          studentName(a.student).toLowerCase().includes(q) ||
           a.student.enrollmentNumber.toLowerCase().includes(q) ||
           a.jobRole.title.toLowerCase().includes(q)
         );
@@ -256,8 +260,14 @@ export function DriveShortlisting({ driveId }: Props) {
             <Select value={bulkAction} onValueChange={setBulkAction}>
               <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="Choose action…" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="shortlist">Shortlist</SelectItem>
-                <SelectItem value="reject">Reject</SelectItem>
+                {/* Values must match bulkShortlistSchema's action enum
+                    ("SHORTLISTED"/"REJECTED") exactly — this used to send
+                    lowercase "shortlist"/"reject", which the API always
+                    rejected with a 400, silently swallowed by the generic
+                    error toast below. Found via Phase 9's real-browser
+                    verification. */}
+                <SelectItem value="SHORTLISTED">Shortlist</SelectItem>
+                <SelectItem value="REJECTED">Reject</SelectItem>
               </SelectContent>
             </Select>
             <Input className="flex-1 min-w-[180px] bg-white" placeholder="Optional note…"
@@ -314,8 +324,8 @@ export function DriveShortlisting({ driveId }: Props) {
                     </button>
                   </td>
                   <td className="p-3">
-                    <p className="font-medium">{a.student.user.name}</p>
-                    <p className="text-xs text-muted-foreground">{a.student.enrollmentNumber} · {a.student.branch.code} · {a.student.batch.academicYear}</p>
+                    <p className="font-medium">{studentName(a.student)}</p>
+                    <p className="text-xs text-muted-foreground">{a.student.enrollmentNumber} · {a.student.batch.branch.code} · {a.student.batch.academicYear}</p>
                   </td>
                   <td className="p-3 text-muted-foreground">{a.jobRole.title}</td>
                   <td className="p-3 font-mono">{a.student.academicRecord?.currentCgpa?.toFixed(2) ?? "—"}</td>
@@ -326,7 +336,7 @@ export function DriveShortlisting({ driveId }: Props) {
                     <StatusBadge status={a.status} className="text-xs" />
                   </td>
                   <td className="p-3">
-                    {a.resumeVersion ? (
+                    {a.resumeVersion?.fileUrl ? (
                       <a href={a.resumeVersion.fileUrl} target="_blank" rel="noopener noreferrer"
                         className="text-xs text-primary underline underline-offset-2 hover:no-underline">
                         View

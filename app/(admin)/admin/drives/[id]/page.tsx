@@ -16,7 +16,6 @@ import {
   MapPin, 
   Users, 
   Clock,
-  Settings,
   FileText,
   Target,
   BarChart3,
@@ -281,7 +280,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
       {/* Tabbed Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="gap-1">
             <FileText className="h-4 w-4" />
             Overview
@@ -313,10 +312,6 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
           <TabsTrigger value="dashboard" className="gap-1">
             <BarChart3 className="h-4 w-4" />
             Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="gap-1">
-            <Settings className="h-4 w-4" />
-            Settings
           </TabsTrigger>
         </TabsList>
 
@@ -351,22 +346,6 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
           <TabsContent value="dashboard">
             <DriveDashboard driveId={drive.id} />
-          </TabsContent>
-
-          <TabsContent value="settings">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Drive Settings</CardTitle>
-                  <CardDescription>
-                    Configure drive settings and preferences.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Drive settings panel coming soon...</p>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </div>
       </Tabs>
