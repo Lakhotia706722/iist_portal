@@ -61,7 +61,7 @@ export async function PUT(
 
     // Handle toggle status action
     if (action === "toggle-status") {
-      const company = await toggleCompanyStatus(params.id);
+      const company = await toggleCompanyStatus(params.id, session.user.id);
       return NextResponse.json({
         message: `Company ${company.isActive ? "activated" : "deactivated"} successfully`,
         company,
@@ -118,7 +118,7 @@ export async function PUT(
       );
     }
 
-    const company = await updateCompany(params.id, validatedData, uploadedLogoKey);
+    const company = await updateCompany(params.id, validatedData, uploadedLogoKey, session.user.id);
 
     return NextResponse.json({
       message: "Company updated successfully",
@@ -145,7 +145,7 @@ export async function DELETE(
     const { searchParams } = new URL(request.url);
     const force = searchParams.get("force") === "true";
 
-    await deleteCompany(params.id, force);
+    await deleteCompany(params.id, force, session.user.id);
 
     return NextResponse.json({
       message: "Company deleted successfully",

@@ -24,9 +24,13 @@ export type AttendanceRecord = {
       id: string;
       student: {
         enrollmentNumber: string;
-        firstName: string;
-        lastName: string;
-        email: string;
+        // Student.firstName/lastName are nullable in the schema; there is
+        // no bare `email` field on Student at all (only User.email, which
+        // this query never selects and nothing here ever read) — this
+        // type previously claimed both incorrectly, hidden by a blind
+        // `as unknown as` cast.
+        firstName: string | null;
+        lastName: string | null;
         batch: {
           academicYear: string;
           branch: {
@@ -156,7 +160,7 @@ export async function markAttendance(
     );
   }
 
-  return attendanceRecord as unknown as AttendanceRecord;
+  return attendanceRecord;
 }
 
 // ─── Bulk Attendance Marking ─────────────────────────────────────────────────

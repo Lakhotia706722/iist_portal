@@ -3,6 +3,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { academicInfoSchema, type AcademicInfoInput } from "@/lib/validations/student";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ interface Props {
 
 export function AcademicInfoForm({ defaultValues, onSuccess, onBack }: Props) {
   const [error, setError] = useState("");
+  const { update } = useSession();
 
   const {
     register,
@@ -63,6 +65,11 @@ export function AcademicInfoForm({ defaultValues, onSuccess, onBack }: Props) {
         setError(body?.error?.message ?? "Failed to save. Please try again.");
         return;
       }
+      // Patch the JWT's onboardingStep in place — without this, middleware
+      // still sees the pre-onboarding token and immediately redirects the
+      // dashboard navigation straight back to /onboarding (see the comment
+      // on the jwt() callback in auth.config.ts).
+      await update({ onboardingStep: 2 });
       onSuccess();
     } catch {
       setError("Network error. Please try again.");

@@ -125,7 +125,7 @@ export async function createDrive(data: DriveInput, createdById: string): Promis
     },
   });
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ export async function listDrives(filters?: {
   ]);
 
   return {
-    drives: drives as unknown as DriveWithDetails[],
+    drives,
     total,
   };
 }
@@ -228,7 +228,7 @@ export async function getDriveById(id: string): Promise<DriveWithDetails> {
     throw new NotFoundError("Placement drive not found");
   }
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ export async function updateDrive(
     newValues: parsedData as Record<string, unknown>,
   });
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Status Management ────────────────────────────────────────────────────────
@@ -369,9 +369,9 @@ export async function updateDriveStatus(
   });
 
   // Send notifications for certain transitions
-  await handleStatusNotifications(updatedDrive as unknown as DriveWithDetails, newStatus);
+  await handleStatusNotifications(updatedDrive, newStatus);
 
-  return updatedDrive as unknown as DriveWithDetails;
+  return updatedDrive;
 }
 
 // ─── Student-Facing Queries ───────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalNumber } from "./common";
 
 // ─── Skill ────────────────────────────────────────────────────────────────────
 
@@ -18,14 +19,14 @@ export const skillCatalogSchema = z.object({
 export const studentSkillSchema = z.object({
   skillId: z.string().min(1, "Skill is required"),
   level: z.enum(SKILL_LEVELS).default("BEGINNER"),
-  yearsExp: z.coerce.number().min(0).max(50).optional(),
+  yearsExp: optionalNumber(z.coerce.number().min(0).max(50)),
 });
 
 export const customSkillSchema = z.object({
   name: z.string().min(1, "Skill name is required").max(100),
   category: z.enum(SKILL_CATEGORIES).default("OTHER"),
   level: z.enum(SKILL_LEVELS).default("BEGINNER"),
-  yearsExp: z.coerce.number().min(0).max(50).optional(),
+  yearsExp: optionalNumber(z.coerce.number().min(0).max(50)),
 });
 
 // ─── Project ──────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ export const internshipSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate: z.string().optional().or(z.literal("")),
   isOngoing: z.boolean().default(false),
-  stipend: z.coerce.number().min(0).optional(),
+  stipend: optionalNumber(z.coerce.number().min(0)),
 });
 
 // ─── Certification ────────────────────────────────────────────────────────────

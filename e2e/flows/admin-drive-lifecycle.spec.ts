@@ -125,16 +125,22 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
 
   const round = await prisma.placementRound.findFirstOrThrow({ where: { driveId, title: "E2E Technical Round" } });
 
-  // Genuine gap found here, not a bug being papered over: there is no UI
-  // anywhere in this codebase (grepped drive-rounds.tsx, drive-shortlisting.tsx,
-  // drive-attendance.tsx) that calls POST /api/admin/rounds/[id]/participants
-  // to move a shortlisted applicant into a round. verify-p0-tabs.ts's fixture
-  // creates the RoundParticipant row directly via Prisma for the same reason.
-  // Bridging that exact way here so the (real, working) attendance-marking
-  // step below has something to mark — but this gap is real and should be
-  // fixed as a follow-up: an admin has no way today to populate a round's
-  // participant list through the app itself.
-  await prisma.roundParticipant.create({ data: { roundId: round.id, applicationId: application.id } });
+  // 7b — Add the shortlisted applicant to the round through the real UI.
+  // Phase 9 found there was no way to do this at all (bridged with a
+  // direct Prisma insert then); Phase 10 built the real "Add Participants"
+  // picker (round-eligible-applications endpoint + dialog) — this closes
+  // that gap for real, no DB bypass.
+  await page.getByText("E2E Technical Round").click(); // expand the round card
+  await page.getByRole("button", { name: /add participants/i }).click();
+  await expect(page.getByRole("dialog").getByText("E2E Student A")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("dialog").getByText("E2E Student A").click();
+  await page.getByRole("dialog").getByRole("button", { name: /^add \d+ participants?$/i }).click();
+  await expect(page.getByText(/participant\(s\) added/i)).toBeVisible({ timeout: 15_000 });
+
+  const participant = await prisma.roundParticipant.findFirst({
+    where: { roundId: round.id, applicationId: application.id },
+  });
+  expect(participant, "Add Participants UI did not create a RoundParticipant row").not.toBeNull();
 
   // 8 — Mark attendance through the real UI — this is the exact tab that
   // was a stub before Phase 3.5; confirming it still isn't one.

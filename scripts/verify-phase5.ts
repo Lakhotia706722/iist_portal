@@ -345,14 +345,28 @@ async function main() {
   // ── P8: Hardening spot-checks ─────────────────────────────────────────────
   console.log("\n[P8] Hardening");
 
-  // Rate limiting on login.
+  // Rate limiting on login. Phase 10: this used to fetch a brand-new CSRF
+  // token (and its Set-Cookie) on every iteration without ever sending
+  // any cookie back — not what a real client does (a browser persists
+  // its session cookies across requests to the same origin), and it's
+  // exactly the traffic shape that made the old IP-less fallback bucket
+  // ("unknown", shared by every client with no reverse proxy in front)
+  // look correct by accident. Reusing one cookie jar across all 15
+  // attempts, like a real client, is both more realistic and lets
+  // clientIp()'s cookie-based fallback (lib/rate-limit.ts) actually do
+  // its job.
   let blocked = false;
+  let cookieJar = "";
+  const csrfRes = await fetch(`${BASE}/api/auth/csrf`);
+  cookieJar = (csrfRes.headers.getSetCookie?.() ?? [csrfRes.headers.get("set-cookie") ?? ""])
+    .map((c) => c.split(";")[0])
+    .filter(Boolean)
+    .join("; ");
+  const { csrfToken } = await csrfRes.json();
   for (let i = 0; i < 15; i++) {
-    const csrfRes = await fetch(`${BASE}/api/auth/csrf`);
-    const { csrfToken } = await csrfRes.json();
     const r = await fetch(`${BASE}/api/auth/callback/credentials`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", cookie: cookieJar },
       body: new URLSearchParams({
         enrollmentNumber: "IIST2021CS01",
         password: "definitely-wrong",

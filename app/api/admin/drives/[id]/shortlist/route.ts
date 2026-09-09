@@ -115,17 +115,21 @@ export async function POST(
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
 
-    // Handle CSV upload
+    // Handle CSV upload — the client parses the .csv file into rows and
+    // posts them as JSON (same pattern as SkillUp's results upload; see
+    // skillup-client.tsx), not the file itself, so this is a plain JSON
+    // body like every other action here.
     if (action === "csv") {
       const body = await request.json();
       const validatedData = csvShortlistSchema.parse(body);
-      
-      const result = await shortlistFromCsv(validatedData, actor.id as string);
-      
+
+      const result = await shortlistFromCsv(params.id, validatedData, actor.id as string);
+
       return NextResponse.json({
-        message: `Processed ${result.processed} enrollment numbers. ${result.shortlisted} shortlisted successfully.`,
+        message: `Processed ${result.processed} row(s): ${result.shortlisted} shortlisted, ${result.rejected} rejected.`,
         processed: result.processed,
         shortlisted: result.shortlisted,
+        rejected: result.rejected,
         failed: result.failed,
       });
     }

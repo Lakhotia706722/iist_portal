@@ -16,12 +16,13 @@ import {
   ChevronUp, ChevronDown, RefreshCw, Download, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchJson } from "@/lib/api-client";
+import { shortlistApplicantsResponseSchema } from "@/lib/validations/responses";
 
 interface Applicant {
   id: string;
   status: string;
   appliedAt: string;
-  adminNote: string | null;
   student: {
     id: string;
     enrollmentNumber: string;
@@ -71,11 +72,20 @@ export function DriveShortlisting({ driveId }: Props) {
       const p = new URLSearchParams({ limit: "100" });
       if (statusFilter) p.set("status", statusFilter);
       if (search) p.set("search", search);
-      const res = await fetch(`/api/admin/drives/${driveId}/shortlist?${p}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setApplicants(data.applications ?? []);
-      setTotal(data.total ?? data.applications?.length ?? 0);
+      // fetchJson catches exactly the class of bug this endpoint had
+      // (student.user.name / .branch.code / resumeVersion.filename+fileUrl
+      // never existed in the real response) immediately, in dev, instead
+      // of three renders downstream.
+      const data = await fetchJson(
+        `/api/admin/drives/${driveId}/shortlist?${p}`,
+        shortlistApplicantsResponseSchema
+      );
+      setApplicants(data.applications);
+      // `total` lives under `pagination`, not top-level — the previous
+      // `data.total` was always undefined, silently falling back to
+      // `data.applications?.length` (which happened to work on a single
+      // unpaginated page, but was quietly wrong).
+      setTotal(data.pagination.total);
     } catch {
       toast({ title: "Error", description: "Failed to load applicants.", variant: "destructive" });
     } finally {
@@ -154,24 +164,78 @@ export function DriveShortlisting({ driveId }: Props) {
     }
   };
 
-  /* ── CSV upload ── */
+  /* ── CSV upload ──
+   * Parsed client-side into rows and posted as JSON — same pattern as
+   * SkillUp's results upload (skillup-client.tsx). Previously this sent
+   * the raw file as multipart FormData to an endpoint that only ever
+   * called request.json() on it, so CSV upload never actually worked;
+   * see the comment on csvShortlistSchema for the full history.
+   */
+  const parseCsvRows = (text: string) => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const splitLine = (l: string) => l.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+
+    // Drop a header row if its 2nd column isn't a recognizable action value.
+    const looksLikeAction = (v: string | undefined) =>
+      !!v && /^(shortlist|shortlisted|reject|rejected)$/i.test(v);
+    const firstCols = lines[0] ? splitLine(lines[0]) : [];
+    const dataLines = looksLikeAction(firstCols[1]) ? lines : lines.slice(1);
+
+    const rows: { enrollmentNumber: string; action: "SHORTLISTED" | "REJECTED"; note?: string }[] = [];
+    const skipped: string[] = [];
+    for (const line of dataLines) {
+      const [enrollmentNumber, actionRaw, note] = splitLine(line);
+      if (!enrollmentNumber) continue;
+      if (/^shortlist(ed)?$/i.test(actionRaw ?? "")) {
+        rows.push({ enrollmentNumber, action: "SHORTLISTED", note: note || undefined });
+      } else if (/^reject(ed)?$/i.test(actionRaw ?? "")) {
+        rows.push({ enrollmentNumber, action: "REJECTED", note: note || undefined });
+      } else {
+        skipped.push(enrollmentNumber);
+      }
+    }
+    return { rows, skipped };
+  };
+
   const uploadCsv = async (file: File) => {
     setCsvUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
+      const text = await file.text();
+      const { rows, skipped } = parseCsvRows(text);
+
+      if (rows.length === 0) {
+        toast({
+          title: "Nothing to upload",
+          description: "No rows with a valid action (shortlist/reject) were found in the CSV.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const res = await fetch(`/api/admin/drives/${driveId}/shortlist?action=csv`, {
-        method: "POST", body: form,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
       });
-      if (!res.ok) throw new Error();
       const data = await res.json();
-      toast({ title: "CSV Processed", description: `${data.processed ?? "?"} records updated.` });
+      if (!res.ok) throw new Error(data?.error ?? "CSV upload failed.");
+
+      const skippedNote = skipped.length > 0 ? ` ${skipped.length} row(s) skipped (invalid action).` : "";
+      toast({
+        title: "CSV Processed",
+        description: `${data.shortlisted ?? 0} shortlisted, ${data.rejected ?? 0} rejected, ${data.failed?.length ?? 0} not found.${skippedNote}`,
+      });
       setShowCsvPanel(false);
       await fetchApplicants(true);
-    } catch {
-      toast({ title: "Error", description: "CSV upload failed.", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "CSV upload failed.",
+        variant: "destructive",
+      });
     } finally {
       setCsvUploading(false);
+      if (csvRef.current) csvRef.current.value = "";
     }
   };
 

@@ -255,7 +255,7 @@ export async function getApplicationById(id: string): Promise<ApplicationWithDet
 
   if (!application) throw new NotFoundError("Application not found");
 
-  return application as unknown as ApplicationWithDetails;
+  return application;
 }
 
 export async function listApplicationsForDrive(
@@ -334,7 +334,7 @@ export async function listApplicationsForDrive(
   }));
 
   return {
-    applications: enriched as unknown as ApplicationWithDetails[],
+    applications: enriched,
     total,
     stats: {
       byStatus: statusStats.reduce((acc, item) => ({ ...acc, [item.status]: item._count._all }), {}),

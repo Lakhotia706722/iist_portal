@@ -23,6 +23,8 @@ import {
   Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchJson } from "@/lib/api-client";
+import { resumeListResponseSchema } from "@/lib/validations/responses";
 
 interface EligibilityResult {
   eligible: boolean;
@@ -81,13 +83,11 @@ export function ApplicationFlow({
   const fetchResumes = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/student/resumes");
-      if (!response.ok) throw new Error("Failed to fetch resumes");
-
-      // GET /api/student/resumes returns the array directly (see
-      // resume-center-client.tsx / ai-resume-builder-client.tsx for the
-      // same contract) — not wrapped in a { resumes: [...] } object.
-      const data: Resume[] = await response.json();
+      // fetchJson runtime-validates the response against
+      // resumeListResponseSchema — this is exactly the call site that used
+      // to silently read `data.resumes` off a bare array and get `[]`
+      // every time. A shape mismatch now throws immediately instead.
+      const data = await fetchJson("/api/student/resumes", resumeListResponseSchema);
       setResumes(data);
 
       // Auto-select the default resume, if it actually has a version to submit.
