@@ -8,15 +8,15 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { companySchema } from "@/lib/validations/placement";
 import { 
   getCompanyById, 
   updateCompany, 
   deleteCompany, 
   toggleCompanyStatus 
-} from "@/lib/services/company.service";
-import { uploadFile } from "@/lib/storage";
+} from "@/server/services/company.service";
+import { getStorageAdapter, buildStorageKey } from "@/lib/storage";
 import { ApiError, handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -33,7 +33,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "company:read");
+    await requirePermission("company:read");
 
     const company = await getCompanyById(params.id);
 
@@ -54,7 +54,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "company:write");
+    await requirePermission("company:write");
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
@@ -98,7 +98,7 @@ export async function PUT(
 
     // Handle logo upload if present
     const logoFile = formData.get("logo") as File | null;
-    let uploadedLogo;
+    let uploadedLogoKey: string | undefined;
 
     if (logoFile && logoFile.size > 0) {
       // Validate file type and size
@@ -111,14 +111,14 @@ export async function PUT(
       }
 
       const logoBuffer = await logoFile.arrayBuffer();
-      uploadedLogo = await uploadFile(
+      uploadedLogoKey = await getStorageAdapter().upload(
+        buildStorageKey("company-logos", "shared", logoFile.name),
         Buffer.from(logoBuffer),
-        `company-logos/${Date.now()}-${logoFile.name}`,
         logoFile.type
       );
     }
 
-    const company = await updateCompany(params.id, validatedData, uploadedLogo?.url);
+    const company = await updateCompany(params.id, validatedData, uploadedLogoKey);
 
     return NextResponse.json({
       message: "Company updated successfully",
@@ -140,7 +140,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "company:write");
+    await requirePermission("company:write");
 
     const { searchParams } = new URL(request.url);
     const force = searchParams.get("force") === "true";

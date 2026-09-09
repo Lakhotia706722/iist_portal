@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { eligibilityRulesBulkSchema } from "@/lib/validations/placement";
-import { bulkUpdateEligibilityRules } from "@/lib/services/job-role.service";
+import { bulkUpdateEligibilityRules } from "@/server/services/job-role.service";
 import { prisma } from "@/lib/prisma";
 import { handleApiError } from "@/lib/api-utils";
 
@@ -27,7 +27,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "eligibility:read");
+    await requirePermission("eligibility:read");
 
     const { searchParams } = new URL(request.url);
     const jobRoleId = searchParams.get("jobRoleId");
@@ -94,7 +94,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "eligibility:write");
+    await requirePermission("eligibility:write");
 
     const body = await request.json();
     const { jobRoleId, rules } = body;

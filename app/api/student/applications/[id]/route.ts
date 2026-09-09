@@ -7,8 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
+import { getStudentIdFromUserId } from "@/lib/auth/student-session";
 import { withdrawSchema } from "@/lib/validations/placement";
-import { getApplicationById, withdrawApplication } from "@/lib/services/application.service";
+import { getApplicationById, withdrawApplication } from "@/server/services/application.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -32,7 +33,8 @@ export async function GET(
     const application = await getApplicationById(params.id);
 
     // Verify the application belongs to the logged-in student
-    if (application.studentId !== session.user.id) {
+    const studentId = await getStudentIdFromUserId(session.user.id);
+    if (application.studentId !== studentId) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
@@ -60,7 +62,8 @@ export async function DELETE(
     // Get application to verify ownership
     const application = await getApplicationById(params.id);
 
-    if (application.studentId !== session.user.id) {
+    const studentId = await getStudentIdFromUserId(session.user.id);
+    if (application.studentId !== studentId) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

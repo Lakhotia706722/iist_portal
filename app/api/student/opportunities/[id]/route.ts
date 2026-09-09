@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { getOpportunityDetail } from "@/lib/services/drive.service";
+import { getStudentIdFromUserId } from "@/lib/auth/student-session";
+import { getOpportunityDetail } from "@/server/services/drive.service";
 import { evaluateEligibility } from "@/lib/eligibility-engine";
 import { handleApiError } from "@/lib/api-utils";
 
@@ -27,6 +28,8 @@ export async function GET(
     if (session.user.role !== "STUDENT") {
       return NextResponse.json({ error: "Only students can access opportunities" }, { status: 403 });
     }
+
+    const studentId = await getStudentIdFromUserId(session.user.id);
 
     const { searchParams } = new URL(request.url);
     const checkEligibility = searchParams.get("checkEligibility") === "true";
@@ -60,7 +63,7 @@ export async function GET(
       await Promise.all(
         opportunity.jobRoles.map(async (jobRole) => {
           try {
-            const result = await evaluateEligibility(session.user.id, jobRole.id);
+            const result = await evaluateEligibility(studentId, jobRole.id);
             eligibilityResults[jobRole.id] = result;
           } catch (error) {
             console.warn(`Eligibility check failed for job role ${jobRole.id}:`, error);
@@ -83,7 +86,7 @@ export async function GET(
     const { prisma } = await import("@/lib/prisma");
     const existingApplications = await prisma.application.findMany({
       where: {
-        studentId: session.user.id,
+        studentId,
         jobRole: {
           driveId: opportunity.id,
         },

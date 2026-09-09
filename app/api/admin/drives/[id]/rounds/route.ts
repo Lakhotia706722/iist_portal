@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { roundSchema } from "@/lib/validations/placement";
-import { createRound, listRounds } from "@/lib/services/round.service";
+import { createRound, listRounds } from "@/server/services/round.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -26,7 +26,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "round:read");
+    await requirePermission("round:read");
 
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get("limit") || "50");
@@ -64,12 +64,12 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "round:write");
+    const actor = await requirePermission("round:write");
 
     const body = await request.json();
     const validatedData = roundSchema.parse(body);
 
-    const round = await createRound(params.id, validatedData);
+    const round = await createRound(params.id, validatedData, actor.id as string);
 
     return NextResponse.json({
       message: "Round created successfully",

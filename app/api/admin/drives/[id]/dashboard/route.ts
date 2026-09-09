@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
-import { getDriveAnalytics, compareDrivePerformance } from "@/lib/services/drive-dashboard.service";
+import { requirePermission } from "@/lib/rbac/server-guard";
+import { getDriveAnalytics, compareDrivePerformance } from "@/server/services/drive-dashboard.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -24,7 +24,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "drive:read");
+    await requirePermission("drive:read");
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");

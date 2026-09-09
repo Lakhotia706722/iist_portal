@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { resetPasswordSchema } from "@/lib/validations/auth";
 import bcrypt from "bcryptjs";
 import { writeAuditLog } from "@/server/services/audit.service";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const limit = checkRateLimit(req, { bucket: "reset-password", limit: 10, windowMs: 60_000 });
+  if (!limit.allowed) return rateLimitedResponse(limit);
+
   try {
     const body = await req.json();
     const parsed = resetPasswordSchema.safeParse(body);

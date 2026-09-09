@@ -190,11 +190,14 @@ export function OpportunityCard({ opportunity, refreshing }: OpportunityCardProp
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {opportunity.company.logoUrl ? (
               <div className="relative h-12 w-12 rounded-lg border bg-white flex-shrink-0 overflow-hidden">
+                {/* unoptimized: see ARCHITECTURE.md §13 — company.logoUrl's declared
+                    MIME type isn't server-verified against actual bytes. */}
                 <Image
                   src={opportunity.company.logoUrl}
                   alt={`${opportunity.company.name} logo`}
                   fill
                   className="object-contain p-1"
+                  unoptimized
                 />
               </div>
             ) : (

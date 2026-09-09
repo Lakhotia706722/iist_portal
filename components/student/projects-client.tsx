@@ -15,7 +15,8 @@ import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, GitBranch, ExternalLink, FolderGit2, X, Image } from "lucide-react";
+import { Plus, Pencil, Trash2, GitBranch, ExternalLink, FolderGit2, X, Image as ImageIcon } from "lucide-react";
+import NextImage from "next/image";
 import { formatDate } from "@/lib/utils";
 
 type ProjectItem = {
@@ -124,8 +125,17 @@ export function ProjectsClient() {
           {data!.map((p) => (
             <Card key={p.id} className="flex flex-col">
               {p.imageUrl && (
-                <div className="h-36 overflow-hidden rounded-t-xl bg-muted">
-                  <img src={p.imageUrl} alt={p.title} className="h-full w-full object-cover" />
+                <div className="relative h-36 overflow-hidden rounded-t-xl bg-muted">
+                  {/* unoptimized: see ARCHITECTURE.md §13 — p.imageUrl is a student-uploaded
+                      file whose declared MIME type isn't server-verified against actual bytes. */}
+                  <NextImage
+                    src={p.imageUrl}
+                    alt={p.title}
+                    fill
+                    sizes="(max-width: 640px) 100vw, 50vw"
+                    className="object-cover"
+                    unoptimized
+                  />
                 </div>
               )}
               <CardContent className="flex flex-1 flex-col gap-3 p-4">
@@ -221,7 +231,7 @@ export function ProjectsClient() {
             <FormField label="Project Image" htmlFor="proj-image" hint="JPEG or PNG, max 2 MB (optional)">
               <div className="flex items-center gap-3">
                 <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                  <Image className="h-4 w-4" />
+                  <ImageIcon className="h-4 w-4" />
                   {imageFile ? imageFile.name : "Upload Image"}
                 </Button>
                 {imageFile && (

@@ -7,9 +7,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
+import { getStudentIdFromUserId } from "@/lib/auth/student-session";
 import { applySchema } from "@/lib/validations/placement";
-import { applyForJobRole, listStudentApplications } from "@/lib/services/application.service";
+import { applyForJobRole, listStudentApplications } from "@/server/services/application.service";
 import { handleApiError } from "@/lib/api-utils";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +37,8 @@ export async function GET(request: NextRequest) {
       offset: Math.max(offset, 0),
     };
 
-    const result = await listStudentApplications(session.user.id, filters);
+    const studentId = await getStudentIdFromUserId(session.user.id);
+    const result = await listStudentApplications(studentId, filters);
 
     return NextResponse.json({
       applications: result.applications,
@@ -53,6 +56,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const limit = checkRateLimit(request, { bucket: "apply", limit: 20, windowMs: 60_000 });
+  if (!limit.allowed) return rateLimitedResponse(limit);
+
   try {
     const session = await auth();
     if (!session?.user) {
@@ -67,7 +73,8 @@ export async function POST(request: NextRequest) {
     const validatedData = applySchema.parse(body);
 
     // Apply for the job role (eligibility is checked in service)
-    const application = await applyForJobRole(session.user.id, validatedData);
+    const studentId = await getStudentIdFromUserId(session.user.id);
+    const application = await applyForJobRole(studentId, validatedData);
 
     return NextResponse.json({
       message: "Application submitted successfully",

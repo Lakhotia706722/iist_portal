@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { driveSchema } from "@/lib/validations/placement";
-import { createDrive, listDrives } from "@/lib/services/drive.service";
+import { createDrive, listDrives } from "@/server/services/drive.service";
 import { handleApiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "drive:read");
+    await requirePermission("drive:read");
 
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId") || undefined;
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "drive:write");
+    await requirePermission("drive:write");
 
     const body = await request.json();
     const validatedData = driveSchema.parse(body);

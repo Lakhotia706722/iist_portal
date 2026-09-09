@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { JourneyTracker, buildJourneySteps } from "./journey-tracker";
@@ -52,13 +53,12 @@ interface Props {
   refreshing?: boolean;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
-  PENDING:     { label: "Pending Review",  cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  SHORTLISTED: { label: "Shortlisted",     cls: "bg-green-50 text-green-700 border-green-200" },
-  REJECTED:    { label: "Not Selected",    cls: "bg-red-50 text-red-700 border-red-200" },
-  WITHDRAWN:   { label: "Withdrawn",       cls: "bg-gray-50 text-gray-600 border-gray-200" },
-  OFFER_MADE:  { label: "Offer Made 🎉",   cls: "bg-violet-50 text-violet-700 border-violet-200" },
-  ACCEPTED:    { label: "Accepted ✓",      cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+/** Softer, student-facing wording; colours come from StatusBadge. */
+const STUDENT_STATUS_LABELS: Record<string, string> = {
+  APPLIED: "Applied",
+  UNDER_REVIEW: "Pending Review",
+  REJECTED: "Not Selected",
+  SELECTED: "Selected 🎉",
 };
 
 function formatCtc(min: number | null, max: number | null) {
@@ -73,7 +73,6 @@ export function ApplicationCard({ application, onWithdraw, onViewDetails, refres
   const [expanded, setExpanded] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
 
-  const statusCfg = STATUS_CONFIG[application.status] ?? { label: application.status, cls: "" };
   const canWithdraw = application.status === "PENDING";
   const journeySteps = buildJourneySteps(application);
 
@@ -92,8 +91,11 @@ export function ApplicationCard({ application, onWithdraw, onViewDetails, refres
           <div className="shrink-0">
             {application.jobRole.drive.company.logoUrl ? (
               <div className="relative h-12 w-12 rounded-lg border bg-white overflow-hidden">
+                {/* unoptimized: company.logoUrl is an admin-uploaded file whose declared
+                    MIME type isn't server-verified against actual bytes — skip Next's
+                    server-side Image Optimization API for it (see ARCHITECTURE.md §13). */}
                 <Image src={application.jobRole.drive.company.logoUrl}
-                  alt={application.jobRole.drive.company.name} fill className="object-contain p-1" />
+                  alt={application.jobRole.drive.company.name} fill className="object-contain p-1" unoptimized />
               </div>
             ) : (
               <div className="h-12 w-12 rounded-lg border bg-muted flex items-center justify-center">
@@ -110,9 +112,11 @@ export function ApplicationCard({ application, onWithdraw, onViewDetails, refres
                 <p className="text-sm text-muted-foreground">{application.jobRole.drive.company.name}</p>
                 <p className="text-xs text-muted-foreground">{application.jobRole.drive.title}</p>
               </div>
-              <Badge variant="secondary" className={cn("shrink-0 text-xs", statusCfg.cls)}>
-                {statusCfg.label}
-              </Badge>
+              <StatusBadge
+                status={application.status}
+                label={STUDENT_STATUS_LABELS[application.status]}
+                className="shrink-0 text-xs"
+              />
             </div>
 
             <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">

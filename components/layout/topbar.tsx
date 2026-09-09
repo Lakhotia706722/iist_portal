@@ -1,10 +1,12 @@
 "use client";
 import { signOut } from "next-auth/react";
-import { Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getInitials } from "@/lib/utils";
 import { useState } from "react";
 import Link from "next/link";
+import { NotificationBell } from "./notification-bell";
+import { GlobalSearch } from "./global-search";
 
 interface TopbarProps {
   userName: string;
@@ -25,14 +27,16 @@ export function Topbar({ userName, userRole, userEmail }: TopbarProps) {
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 gap-4">
+      {/* Global search — staff roles only */}
+      {(userRole === "TP_ADMIN" || userRole === "HOD" || userRole === "FACULTY") && (
+        <GlobalSearch />
+      )}
+
       {/* Spacer */}
       <div className="flex-1" />
 
       {/* Notifications */}
-      <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-        <Bell className="h-5 w-5" />
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />
-      </Button>
+      <NotificationBell />
 
       {/* User menu */}
       <div className="relative">

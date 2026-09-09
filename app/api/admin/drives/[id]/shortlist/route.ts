@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { bulkShortlistSchema, csvShortlistSchema } from "@/lib/validations/placement";
 import { 
   listShortlistableApplications, 
@@ -15,7 +15,7 @@ import {
   shortlistFromCsv,
   getShortlistStats,
   exportShortlistData 
-} from "@/lib/services/shortlist.service";
+} from "@/server/services/shortlist.service";
 import { handleApiError, createCsvResponse } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -32,7 +32,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "shortlist:read");
+    await requirePermission("shortlist:read");
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
@@ -110,7 +110,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "shortlist:write");
+    const actor = await requirePermission("shortlist:write");
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
@@ -120,7 +120,7 @@ export async function POST(
       const body = await request.json();
       const validatedData = csvShortlistSchema.parse(body);
       
-      const result = await shortlistFromCsv(validatedData);
+      const result = await shortlistFromCsv(validatedData, actor.id as string);
       
       return NextResponse.json({
         message: `Processed ${result.processed} enrollment numbers. ${result.shortlisted} shortlisted successfully.`,
@@ -134,7 +134,7 @@ export async function POST(
     const body = await request.json();
     const validatedData = bulkShortlistSchema.parse(body);
     
-    const result = await bulkShortlistApplications(validatedData);
+    const result = await bulkShortlistApplications(validatedData, actor.id as string);
     
     return NextResponse.json({
       message: `${result.updated} applications ${validatedData.action.toLowerCase()} successfully`,

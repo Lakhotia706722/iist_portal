@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,7 +75,7 @@ export function DriveDashboard({ driveId }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
 
-  const fetchDashboard = async (quiet = false) => {
+  const fetchDashboard = useCallback(async (quiet = false) => {
     quiet ? setRefreshing(true) : setLoading(true);
     try {
       const res = await fetch(`/api/admin/drives/${driveId}/dashboard`);
@@ -88,9 +88,9 @@ export function DriveDashboard({ driveId }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [driveId, toast]);
 
-  useEffect(() => { fetchDashboard(); }, [driveId]);
+  useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
 

@@ -1,26 +1,49 @@
 import { prisma } from "@/lib/prisma";
+import { getPolicyValue } from "@/server/services/policy.service";
 
-// ─── Weight table ─────────────────────────────────────────────────────────────
-// Total possible = 100 points. Each section earns its weight when complete.
+// ─── Section structure ─────────────────────────────────────────────────────────
+// Section identity (key/label/group) is structural — it corresponds to actual
+// profile fields evaluated below and doesn't belong in policy. The *weight*
+// each section is worth is policy-driven (Phase 5): see the
+// "profile_completion_weights" key in lib/policy/keys.ts. Falls back to these
+// defaults when no policy override is configured or it fails to parse.
 
-export const COMPLETION_SECTIONS = [
-  // Core (Phase 1)
-  { key: "personal_info",    label: "Personal Information",     weight: 15, group: "Core" },
-  { key: "academic_info",    label: "Academic Details & SGPA",  weight: 15, group: "Core" },
-  // Phase 2 profile sections
-  { key: "skills",           label: "Skills",                   weight: 10, group: "Career" },
-  { key: "projects",         label: "Projects",                 weight: 10, group: "Career" },
-  { key: "internships",      label: "Internship / Experience",  weight: 10, group: "Career" },
-  { key: "certifications",   label: "Certifications",           weight:  8, group: "Career" },
-  { key: "achievements",     label: "Achievements",             weight:  7, group: "Career" },
-  { key: "social_profiles",  label: "Social Profiles",          weight:  8, group: "Online" },
-  { key: "video_profile",    label: "Video Profile",            weight:  7, group: "Online" },
-  // Documents
-  { key: "resume_uploaded",  label: "Resume Uploaded",          weight:  5, group: "Documents" },
-  { key: "documents",        label: "Key Documents",            weight:  5, group: "Documents" },
+export const SECTION_META = [
+  { key: "personal_info",    label: "Personal Information",     group: "Core" },
+  { key: "academic_info",    label: "Academic Details & SGPA",  group: "Core" },
+  { key: "skills",           label: "Skills",                   group: "Career" },
+  { key: "projects",         label: "Projects",                 group: "Career" },
+  { key: "internships",      label: "Internship / Experience",  group: "Career" },
+  { key: "certifications",   label: "Certifications",           group: "Career" },
+  { key: "achievements",     label: "Achievements",             group: "Career" },
+  { key: "social_profiles",  label: "Social Profiles",          group: "Online" },
+  { key: "video_profile",    label: "Video Profile",            group: "Online" },
+  { key: "resume_uploaded",  label: "Resume Uploaded",          group: "Documents" },
+  { key: "documents",        label: "Key Documents",            group: "Documents" },
 ] as const;
 
-export type SectionKey = typeof COMPLETION_SECTIONS[number]["key"];
+export type SectionKey = typeof SECTION_META[number]["key"];
+
+/** Coded fallback — used whenever no valid policy override exists. */
+export const DEFAULT_WEIGHTS: Record<SectionKey, number> = {
+  personal_info: 15,
+  academic_info: 15,
+  skills: 10,
+  projects: 10,
+  internships: 10,
+  certifications: 8,
+  achievements: 7,
+  social_profiles: 8,
+  video_profile: 7,
+  resume_uploaded: 5,
+  documents: 5,
+};
+
+/** Retained for compatibility with any existing callers that read weights directly. */
+export const COMPLETION_SECTIONS = SECTION_META.map((s) => ({
+  ...s,
+  weight: DEFAULT_WEIGHTS[s.key],
+}));
 
 export interface CompletionSection {
   key: SectionKey;
@@ -35,6 +58,41 @@ export interface ProfileCompletion {
   score: number;        // 0–100
   sections: CompletionSection[];
   nextSteps: string[];  // top 3 incomplete sections by weight desc
+}
+
+/**
+ * Resolve the effective weight table: the policy value for
+ * "profile_completion_weights" (a JSON object of {sectionKey: weight}),
+ * scoped to the student's batch, merged over the coded defaults for any
+ * section it doesn't mention. Falls back entirely to defaults if unset,
+ * invalid JSON, or the weights don't sum to 100.
+ */
+async function resolveWeights(batchId: string | null): Promise<Record<SectionKey, number>> {
+  let raw: string;
+  try {
+    raw = await getPolicyValue<string>("profile_completion_weights", batchId);
+  } catch {
+    return DEFAULT_WEIGHTS;
+  }
+  if (!raw) return DEFAULT_WEIGHTS;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const merged: Record<SectionKey, number> = { ...DEFAULT_WEIGHTS };
+    let total = 0;
+    for (const s of SECTION_META) {
+      const v = parsed[s.key];
+      const n = typeof v === "number" ? v : Number(v);
+      merged[s.key] = Number.isFinite(n) && n >= 0 ? n : DEFAULT_WEIGHTS[s.key];
+      total += merged[s.key];
+    }
+    // A materially broken configuration (doesn't sum near 100) is safer to
+    // ignore than to silently mis-score every student's profile.
+    if (Math.abs(total - 100) > 1) return DEFAULT_WEIGHTS;
+    return merged;
+  } catch {
+    return DEFAULT_WEIGHTS;
+  }
 }
 
 // ─── Main calculation ─────────────────────────────────────────────────────────
@@ -57,6 +115,8 @@ export async function calculateProfileCompletion(studentId: string): Promise<Pro
       documents:     { take: 1 },
     },
   });
+
+  const weights = await resolveWeights(student.batchId ?? null);
 
   const checks: Record<SectionKey, { complete: boolean; hint?: string }> = {
     personal_info: {
@@ -108,8 +168,9 @@ export async function calculateProfileCompletion(studentId: string): Promise<Pro
     },
   };
 
-  const sections: CompletionSection[] = COMPLETION_SECTIONS.map((s) => ({
+  const sections: CompletionSection[] = SECTION_META.map((s) => ({
     ...s,
+    weight: weights[s.key],
     isComplete: checks[s.key].complete,
     hint: checks[s.key].complete ? undefined : checks[s.key].hint,
   }));

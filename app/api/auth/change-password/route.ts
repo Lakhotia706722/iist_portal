@@ -4,8 +4,12 @@ import { changePasswordSchema } from "@/lib/validations/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { writeAuditLog } from "@/server/services/audit.service";
+import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  const limit = checkRateLimit(req, { bucket: "change-password", limit: 10, windowMs: 60_000 });
+  if (!limit.allowed) return rateLimitedResponse(limit);
+
   try {
     const actor = await requireAuth();
     const body = await req.json();

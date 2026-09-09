@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,17 +97,17 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
   const router = useRouter();
   const { toast } = useToast();
 
-  const fetchOpportunityDetails = async () => {
+  const fetchOpportunityDetails = useCallback(async () => {
     try {
       const response = await fetch(
         `/api/student/opportunities/${opportunityId}?checkEligibility=true`
       );
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           toast({
             title: "Opportunity Not Found",
-            description: "The opportunity you're looking for doesn't exist or has been removed.",
+            description: "The opportunity you&rsquo;re looking for doesn&rsquo;t exist or has been removed.",
             variant: "destructive",
           });
           router.push("/student/opportunities");
@@ -128,11 +128,11 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
     } finally {
       setLoading(false);
     }
-  };
+  }, [opportunityId, router, toast]);
 
   useEffect(() => {
     fetchOpportunityDetails();
-  }, [opportunityId]);
+  }, [fetchOpportunityDetails]);
 
   // Auto-refresh to keep countdown timers accurate
   useEffect(() => {
@@ -143,7 +143,7 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
     }, 60000); // Refresh every minute
 
     return () => clearInterval(interval);
-  }, [data?.opportunity.timeStatus]);
+  }, [data?.opportunity.timeStatus, fetchOpportunityDetails]);
 
   const handleApplyClick = (jobRoleId: string) => {
     setSelectedJobRoleId(jobRoleId);
@@ -181,7 +181,7 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
         <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h2 className="text-xl font-semibold mb-2">Opportunity Not Found</h2>
         <p className="text-muted-foreground mb-4">
-          The opportunity you're looking for doesn't exist or has been removed.
+          The opportunity you&rsquo;re looking for doesn&rsquo;t exist or has been removed.
         </p>
         <Button asChild>
           <Link href="/student/opportunities">

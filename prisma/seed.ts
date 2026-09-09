@@ -317,6 +317,47 @@ async function main() {
     skipDuplicates: true,
   });
 
+  // ─── Phase 4: SkillUp assessment categories ────────────────────────────────
+  // Categories are data, so these are starting points the college can extend.
+  const TEST_TYPES = [
+    { name: "Aptitude", slug: "aptitude", sortOrder: 1 },
+    { name: "Logical Reasoning", slug: "logical-reasoning", sortOrder: 2 },
+    { name: "Technical", slug: "technical", sortOrder: 3 },
+    { name: "Coding", slug: "coding", sortOrder: 4 },
+    { name: "Communication", slug: "communication", sortOrder: 5 },
+  ];
+  for (const t of TEST_TYPES) {
+    await prisma.testType.upsert({
+      where: { slug: t.slug },
+      update: {},
+      create: { ...t, isActive: true },
+    });
+  }
+
+  // ─── Phase 5: Policy engine defaults ───────────────────────────────────────
+  // Institute-wide rows (batchId = null) for every named policy value. These
+  // match the coded defaults in lib/policy/keys.ts, but seeding them as real
+  // rows makes the policy visibly "configured" rather than silently defaulted.
+  const POLICY_DEFAULTS: Array<{ key: string; value: string; type: "NUMBER" | "BOOLEAN" | "STRING"; description: string }> = [
+    { key: "skillup_required", value: "false", type: "BOOLEAN", description: "A student must have at least one SkillUp result before being marked Eligible." },
+    { key: "min_skillup_score", value: "0", type: "NUMBER", description: "Baseline SkillUp average percentage for compliance." },
+    { key: "high_package_threshold", value: "10", type: "NUMBER", description: "CTC (LPA) at or above which an offer is a high-package placement." },
+    { key: "max_offers_per_student", value: "1", type: "NUMBER", description: "Maximum active (non-withdrawn/declined) offers a student may hold." },
+    { key: "min_ctc_difference", value: "0", type: "NUMBER", description: "Minimum CTC increase (LPA) required between a student's offers." },
+    { key: "min_attendance_percentage", value: "0", type: "NUMBER", description: "Minimum percentage of scheduled placement rounds a student must attend." },
+    { key: "withdrawal_allowed_after_shortlist", value: "true", type: "BOOLEAN", description: "Whether a student may withdraw an application after being shortlisted." },
+    { key: "document_verification_required", value: "false", type: "BOOLEAN", description: "Whether every document must be VERIFIED for Eligible status." },
+    { key: "already_placed_statuses", value: "SELECTED", type: "STRING", description: "Application statuses that count as already placed." },
+  ];
+  for (const p of POLICY_DEFAULTS) {
+    const existing = await prisma.policyRule.findFirst({ where: { key: p.key, batchId: null } });
+    if (!existing) {
+      await prisma.policyRule.create({
+        data: { ...p, batchId: null, updatedById: adminUser.id },
+      });
+    }
+  }
+
   console.log("\n✅ Seed complete!\n");
   console.log("Demo accounts (all passwords: Password@123)");
   console.log("─────────────────────────────────────────────────────");

@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IIST Career Development & Placement Management Portal
 
-## Getting Started
+Next.js (App Router) + TypeScript, Prisma + PostgreSQL, Auth.js, Tailwind + shadcn/ui.
 
-First, run the development server:
+> **Read [ARCHITECTURE.md](./ARCHITECTURE.md) before adding a feature.**
+> It records the binding decisions — most importantly that **mutations use REST
+> route handlers under `app/api/**` with TanStack Query, not Server Actions**
+> (Phase 3.5 override), that every API handler must call its own permission
+> guard, and that all file access goes through the storage adapter.
+
+See [SETUP.md](./SETUP.md) for environment and database setup.
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env      # then fill in DATABASE_URL and AUTH_SECRET
+npx prisma migrate deploy # build the schema
+npm run db:seed           # demo accounts (all passwords: Password@123)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm test` | Vitest unit/component tests |
+| `npm run lint` | ESLint |
+| `npm run db:migrate` | Create/apply a migration in development |
+| `npm run db:seed` | Seed demo data |
+| `npm run db:studio` | Prisma Studio |
 
-## Learn More
+Verification scripts (require a running database, and for the HTTP one a running
+dev server) are listed at the bottom of [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-To learn more about Next.js, take a look at the following resources:
+## Roles
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Student, T&P Admin, Faculty, HOD, Company Rep — permissions are defined in
+`lib/rbac/index.ts` and enforced per route handler.

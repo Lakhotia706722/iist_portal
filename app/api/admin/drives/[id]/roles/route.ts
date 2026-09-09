@@ -7,9 +7,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { jobRoleSchema } from "@/lib/validations/placement";
-import { createJobRole, listJobRoles } from "@/lib/services/job-role.service";
+import { createJobRole, listJobRoles } from "@/server/services/job-role.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -26,7 +26,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "jobrole:read");
+    await requirePermission("jobrole:read");
 
     const { searchParams } = new URL(request.url);
     const isActive = searchParams.get("isActive");
@@ -66,7 +66,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "jobrole:write");
+    await requirePermission("jobrole:write");
 
     const body = await request.json();
     const validatedData = jobRoleSchema.parse(body);

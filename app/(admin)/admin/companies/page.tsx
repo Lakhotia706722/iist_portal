@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, Search, Filter, MoreHorizontal, Building2, Globe, MapPin, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CompanyForm } from "@/components/admin/company-form";
 import { CompanyStats } from "@/components/admin/company-stats";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface Company {
   id: string;
@@ -94,15 +94,11 @@ export default function CompaniesPage() {
 
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchCompanies();
-  }, [searchQuery, industryFilter, statusFilter]);
-
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      
+
       if (searchQuery) params.set("search", searchQuery);
       if (industryFilter !== "all") params.set("industry", industryFilter);
       if (statusFilter !== "all") params.set("isActive", statusFilter);
@@ -124,7 +120,11 @@ export default function CompaniesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchQuery, industryFilter, statusFilter, toast]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
 
   const handleCreateCompany = () => {
     setSelectedCompany(null);

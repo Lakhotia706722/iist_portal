@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeft, 
@@ -20,7 +20,8 @@ import {
   FileText,
   Target,
   BarChart3,
-  UserCheck
+  UserCheck,
+  Presentation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +44,7 @@ import { DriveRounds } from "@/components/admin/drive-rounds";
 import { DriveShortlisting } from "@/components/admin/drive-shortlisting";
 import { DriveAttendance } from "@/components/admin/drive-attendance";
 import { DriveDashboard } from "@/components/admin/drive-dashboard";
+import { DrivePrePlacementTalk } from "@/components/admin/drive-ppt";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface DriveDetail {
@@ -103,11 +105,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
   const router = useRouter();
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchDriveDetail();
-  }, [params.id]);
-
-  const fetchDriveDetail = async () => {
+  const fetchDriveDetail = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/admin/drives/${params.id}`);
@@ -125,7 +123,11 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, toast]);
+
+  useEffect(() => {
+    fetchDriveDetail();
+  }, [fetchDriveDetail]);
 
   const handleEditDrive = () => {
     setShowEditDialog(true);
@@ -304,6 +306,10 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
             <Calendar className="h-4 w-4" />
             Attendance
           </TabsTrigger>
+          <TabsTrigger value="ppt" className="gap-1">
+            <Presentation className="h-4 w-4" />
+            <span className="hidden sm:inline">PPT</span>
+          </TabsTrigger>
           <TabsTrigger value="dashboard" className="gap-1">
             <BarChart3 className="h-4 w-4" />
             Dashboard
@@ -337,6 +343,10 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
           <TabsContent value="attendance">
             <DriveAttendance driveId={drive.id} />
+          </TabsContent>
+
+          <TabsContent value="ppt">
+            <DrivePrePlacementTalk driveId={drive.id} />
           </TabsContent>
 
           <TabsContent value="dashboard">

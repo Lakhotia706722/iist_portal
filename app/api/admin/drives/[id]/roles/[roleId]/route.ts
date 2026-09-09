@@ -8,14 +8,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { jobRoleSchema } from "@/lib/validations/placement";
 import { 
   getJobRoleById, 
   updateJobRole, 
   deleteJobRole, 
   toggleJobRoleStatus 
-} from "@/lib/services/job-role.service";
+} from "@/server/services/job-role.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -32,7 +32,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "jobrole:read");
+    await requirePermission("jobrole:read");
 
     const jobRole = await getJobRoleById(params.roleId);
 
@@ -53,7 +53,7 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "jobrole:write");
+    await requirePermission("jobrole:write");
 
     const { searchParams } = new URL(request.url);
     const action = searchParams.get("action");
@@ -94,7 +94,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "jobrole:write");
+    await requirePermission("jobrole:write");
 
     await deleteJobRole(params.roleId);
 

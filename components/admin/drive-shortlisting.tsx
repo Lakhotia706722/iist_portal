@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { EmptyState } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { useToast } from "@/hooks/use-toast";
 import {
   UserCheck, Filter, Upload, Search, CheckSquare, Square,
@@ -41,15 +42,6 @@ const STATUS_OPTIONS = [
   { value: "REJECTED",    label: "Rejected" },
 ];
 
-const STATUS_BADGE: Record<string, string> = {
-  PENDING:     "bg-amber-50 text-amber-700 border-amber-200",
-  SHORTLISTED: "bg-green-50 text-green-700 border-green-200",
-  REJECTED:    "bg-red-50 text-red-700 border-red-200",
-  WITHDRAWN:   "bg-gray-50 text-gray-600 border-gray-200",
-  OFFER_MADE:  "bg-violet-50 text-violet-700 border-violet-200",
-  ACCEPTED:    "bg-emerald-50 text-emerald-700 border-emerald-200",
-};
-
 export function DriveShortlisting({ driveId }: Props) {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [total, setTotal] = useState(0);
@@ -69,7 +61,7 @@ export function DriveShortlisting({ driveId }: Props) {
   const csvRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const fetchApplicants = async (quiet = false) => {
+  const fetchApplicants = useCallback(async (quiet = false) => {
     quiet ? setRefreshing(true) : setLoading(true);
     try {
       const p = new URLSearchParams({ limit: "100" });
@@ -86,9 +78,13 @@ export function DriveShortlisting({ driveId }: Props) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+    // Intentionally excludes `search`: search is applied client-side to the
+    // fetched page (see `displayed` below), so re-fetching per keystroke
+    // would be wasteful — only the status filter triggers a re-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveId, statusFilter, toast]);
 
-  useEffect(() => { fetchApplicants(); }, [driveId, statusFilter]);
+  useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
 
   /* ── filtering / sorting (client-side) ── */
   const displayed = applicants
@@ -327,9 +323,7 @@ export function DriveShortlisting({ driveId }: Props) {
                     {new Date(a.appliedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                   </td>
                   <td className="p-3">
-                    <Badge variant="secondary" className={cn("text-xs", STATUS_BADGE[a.status] ?? "")}>
-                      {a.status.replace(/_/g, " ")}
-                    </Badge>
+                    <StatusBadge status={a.status} className="text-xs" />
                   </td>
                   <td className="p-3">
                     {a.resumeVersion ? (

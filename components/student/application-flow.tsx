@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,22 +67,15 @@ export function ApplicationFlow({
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
-  // Fetch available resumes when reaching resume step
-  useEffect(() => {
-    if (currentStep === "resume") {
-      fetchResumes();
-    }
-  }, [currentStep]);
-
-  const fetchResumes = async () => {
+  const fetchResumes = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/student/resumes");
       if (!response.ok) throw new Error("Failed to fetch resumes");
-      
+
       const data = await response.json();
       setResumes(data.resumes || []);
-      
+
       // Auto-select default resume if available
       const defaultResume = data.resumes?.find((r: Resume) => r.isDefault);
       if (defaultResume) {
@@ -98,7 +91,14 @@ export function ApplicationFlow({
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  // Fetch available resumes when reaching resume step
+  useEffect(() => {
+    if (currentStep === "resume") {
+      fetchResumes();
+    }
+  }, [currentStep, fetchResumes]);
 
   const handleSubmitApplication = async () => {
     if (!selectedResumeId) {

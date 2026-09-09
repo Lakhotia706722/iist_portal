@@ -1,131 +1,104 @@
 /**
  * Admin Round Participants API — Phase 3
- * 
- * POST /api/admin/rounds/[id]/participants - Add participants to round
+ *
+ * POST   /api/admin/rounds/[id]/participants - Add participants to round
  * DELETE /api/admin/rounds/[id]/participants - Remove participant from round
- * PUT /api/admin/rounds/[id]/participants - Update participant results
+ * PUT    /api/admin/rounds/[id]/participants - Update participant results
+ *
+ * Phase 5: closed a validation gap here — `result`/`remarks`/`nextAction`
+ * used to be passed straight from the request body to the service with no
+ * type or length checking.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
-import { 
-  addParticipants, 
-  removeParticipant, 
+import { z } from "zod";
+import { requirePermission } from "@/lib/rbac/server-guard";
+import {
+  addParticipants,
+  removeParticipant,
   updateParticipantResult,
-  bulkUpdateParticipantResults 
-} from "@/lib/services/round.service";
+  bulkUpdateParticipantResults,
+} from "@/server/services/round.service";
+import { participantResultSchema } from "@/lib/validations/placement";
+import { BadRequestError } from "@/lib/errors";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
   params: { id: string };
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+const addParticipantsSchema = z.object({
+  applicationIds: z.array(z.string().min(1)).min(1, "applicationIds array is required"),
+});
+
+const bulkUpdateSchema = z.object({
+  updates: z
+    .array(participantResultSchema.extend({ participantId: z.string().min(1) }))
+    .min(1),
+});
+
+const singleUpdateSchema = participantResultSchema.extend({
+  participantId: z.string().min(1),
+});
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requirePermission("round:participant:write");
 
-    await checkPermission(session.user.id, "round:participant:write");
-
-    const body = await request.json();
-    const { applicationIds } = body;
-
-    if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
-      return NextResponse.json({ error: "applicationIds array is required" }, { status: 400 });
-    }
-
+    const { applicationIds } = addParticipantsSchema.parse(await request.json());
     const round = await addParticipants(params.id, applicationIds);
 
     return NextResponse.json({
       message: `${applicationIds.length} participants added successfully`,
       round,
     });
-
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    await checkPermission(session.user.id, "round:participant:write");
+    await requirePermission("round:participant:write");
 
     const { searchParams } = new URL(request.url);
     const applicationId = searchParams.get("applicationId");
-
-    if (!applicationId) {
-      return NextResponse.json({ error: "applicationId is required" }, { status: 400 });
-    }
+    if (!applicationId) throw new BadRequestError("applicationId is required");
 
     const round = await removeParticipant(params.id, applicationId);
 
-    return NextResponse.json({
-      message: "Participant removed successfully",
-      round,
-    });
-
+    return NextResponse.json({ message: "Participant removed successfully", round });
   } catch (error) {
     return handleApiError(error);
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    await checkPermission(session.user.id, "round:participant:write");
+    await requirePermission("round:participant:write");
 
     const body = await request.json();
-    
-    // Check if bulk update or single update
+
     if (body.updates && Array.isArray(body.updates)) {
-      // Bulk update
-      const round = await bulkUpdateParticipantResults(params.id, body.updates);
-      
+      const { updates } = bulkUpdateSchema.parse(body);
+      const round = await bulkUpdateParticipantResults(params.id, updates);
       return NextResponse.json({
-        message: `${body.updates.length} participant results updated`,
+        message: `${updates.length} participant results updated`,
         round,
       });
-    } else if (body.participantId) {
-      // Single update
-      const { participantId, result, remarks, nextAction } = body;
-      
+    }
+
+    if (body.participantId) {
+      const { participantId, result, remarks, nextAction } = singleUpdateSchema.parse(body);
       const participant = await updateParticipantResult(participantId, {
         result,
         remarks,
         nextAction,
       });
-      
-      return NextResponse.json({
-        message: "Participant result updated successfully",
-        participant,
-      });
-    } else {
-      return NextResponse.json({ 
-        error: "Either 'updates' array or 'participantId' is required" 
-      }, { status: 400 });
+      return NextResponse.json({ message: "Participant result updated successfully", participant });
     }
 
+    throw new BadRequestError("Either 'updates' array or 'participantId' is required");
   } catch (error) {
     return handleApiError(error);
   }

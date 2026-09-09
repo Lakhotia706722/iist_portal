@@ -7,13 +7,13 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
-import { checkPermission } from "@/lib/rbac";
+import { requirePermission } from "@/lib/rbac/server-guard";
 import { attendanceSchema, bulkAttendanceSchema } from "@/lib/validations/placement";
 import { 
   getRoundAttendance, 
   markAttendance, 
   bulkMarkAttendance 
-} from "@/lib/services/attendance.service";
+} from "@/server/services/attendance.service";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -30,7 +30,7 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "attendance:read");
+    await requirePermission("attendance:read");
 
     const result = await getRoundAttendance(params.id);
 
@@ -51,7 +51,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkPermission(session.user.id, "attendance:write");
+    await requirePermission("attendance:write");
 
     const body = await request.json();
     
