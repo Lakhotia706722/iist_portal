@@ -15,9 +15,12 @@ interface Props {
   defaultValues?: any;
   onSuccess: () => void;
   onBack: () => void;
+  /** Phase 12 — "Complete Profile ✓" reads oddly once this form is reused
+   *  post-onboarding (personal-academic-profile.tsx); override it there. */
+  submitLabel?: string;
 }
 
-export function AcademicInfoForm({ defaultValues, onSuccess, onBack }: Props) {
+export function AcademicInfoForm({ defaultValues, onSuccess, onBack, submitLabel }: Props) {
   const [error, setError] = useState("");
   const { update } = useSession();
 
@@ -253,7 +256,7 @@ export function AcademicInfoForm({ defaultValues, onSuccess, onBack }: Props) {
           ← Back
         </Button>
         <Button type="submit" size="lg" loading={isSubmitting}>
-          Complete Profile ✓
+          {submitLabel ?? "Complete Profile ✓"}
         </Button>
       </div>
     </form>

@@ -52,3 +52,44 @@ export type DepartmentInput = z.infer<typeof departmentSchema>;
 export type CourseInput = z.infer<typeof courseSchema>;
 export type BranchInput = z.infer<typeof branchSchema>;
 export type BatchInput = z.infer<typeof batchSchema>;
+
+// ─── Users & Roles (Phase 12) ──────────────────────────────────────────────
+// Staff accounts only (TP_ADMIN / FACULTY / HOD / COMPANY_REP) — STUDENT
+// accounts are created through registration/onboarding, a separate flow
+// with far more required fields (enrollment number, branch, batch...) that
+// this admin screen isn't taking over.
+
+export const STAFF_ROLES = ["TP_ADMIN", "FACULTY", "HOD", "COMPANY_REP"] as const;
+
+export const createUserSchema = z
+  .object({
+    name: z.string().min(1, "Name is required").max(200),
+    email: z.string().email("Enter a valid email"),
+    role: z.enum(STAFF_ROLES),
+    // Role-specific profile fields — required only for the roles that need
+    // them; refined below since a bare z.string().optional() would accept
+    // an empty string for e.g. a HOD's required department.
+    employeeId: z.string().max(50).optional(),
+    designation: z.string().max(200).optional(),
+    departmentId: z.string().optional(),
+    companyId: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if ((data.role === "FACULTY" || data.role === "HOD") && !data.employeeId) {
+      ctx.addIssue({ code: "custom", path: ["employeeId"], message: "Employee ID is required" });
+    }
+    if ((data.role === "FACULTY" || data.role === "HOD") && !data.departmentId) {
+      ctx.addIssue({ code: "custom", path: ["departmentId"], message: "Department is required" });
+    }
+    if (data.role === "FACULTY" && !data.designation) {
+      ctx.addIssue({ code: "custom", path: ["designation"], message: "Designation is required" });
+    }
+  });
+
+export const updateUserSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;

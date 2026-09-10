@@ -213,6 +213,64 @@ export async function createRound(
 
 // ─── Read Rounds ──────────────────────────────────────────────────────────────
 
+// ─── Cross-drive rounds overview (Phase 12) ────────────────────────────────
+// Backs the top-level "Rounds" nav page (Admin-only) — every existing round
+// tool (listRounds above, createRound, updateRound) is scoped to one drive
+// at a time; this is the "every round, across every drive" queue that
+// nav-config.tsx pointed at but never had a page behind.
+
+export async function listRoundsOverview(filters?: {
+  driveId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  rounds: Array<{
+    id: string;
+    title: string;
+    type: string;
+    mode: string;
+    scheduledAt: Date | null;
+    venue: string | null;
+    isCompleted: boolean;
+    drive: { id: string; title: string; company: { name: string } };
+    participantCount: number;
+  }>;
+  total: number;
+}> {
+  const where: any = {};
+  if (filters?.driveId) where.driveId = filters.driveId;
+  if (filters?.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: "insensitive" } },
+      { drive: { title: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [rounds, total] = await Promise.all([
+    prisma.placementRound.findMany({
+      where,
+      select: {
+        id: true, title: true, type: true, mode: true, scheduledAt: true, venue: true, isCompleted: true,
+        drive: { select: { id: true, title: true, company: { select: { name: true } } } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { scheduledAt: "desc" },
+      skip: filters?.offset || 0,
+      take: filters?.limit || 50,
+    }),
+    prisma.placementRound.count({ where }),
+  ]);
+
+  return {
+    rounds: rounds.map((r) => ({
+      id: r.id, title: r.title, type: r.type, mode: r.mode, scheduledAt: r.scheduledAt,
+      venue: r.venue, isCompleted: r.isCompleted, drive: r.drive, participantCount: r._count.participants,
+    })),
+    total,
+  };
+}
+
 export async function listRounds(
   driveId: string,
   filters?: {

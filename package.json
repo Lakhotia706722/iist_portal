@@ -13,7 +13,10 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:nav": "tsx scripts/check-nav-integrity.ts",
+    "check:stubs": "tsx scripts/check-stub-patterns.ts",
+    "check:all": "npm run check:nav && npm run check:stubs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

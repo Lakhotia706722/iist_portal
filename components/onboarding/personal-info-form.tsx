@@ -12,6 +12,9 @@ import { FormField } from "@/components/ui/form-field";
 interface Props {
   defaultValues?: any;
   onSuccess: () => void;
+  /** Phase 12 — "Save & Continue →" reads oddly once this form is reused
+   *  post-onboarding (personal-academic-profile.tsx); override it there. */
+  submitLabel?: string;
 }
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
@@ -24,7 +27,7 @@ const INDIAN_STATES = [
   "Delhi","Jammu and Kashmir","Ladakh","Lakshadweep","Puducherry",
 ];
 
-export function PersonalInfoForm({ defaultValues, onSuccess }: Props) {
+export function PersonalInfoForm({ defaultValues, onSuccess, submitLabel }: Props) {
   const [error, setError] = useState("");
   const [sameAddress, setSameAddress] = useState(false);
 
@@ -286,7 +289,7 @@ export function PersonalInfoForm({ defaultValues, onSuccess }: Props) {
 
       <div className="flex justify-end">
         <Button type="submit" size="lg" loading={isSubmitting}>
-          Save & Continue →
+          {submitLabel ?? "Save & Continue →"}
         </Button>
       </div>
     </form>

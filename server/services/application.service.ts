@@ -343,6 +343,57 @@ export async function listApplicationsForDrive(
   };
 }
 
+/**
+ * Phase 12 — cross-drive applications list. `/admin/applications`,
+ * `/faculty/applications` both need "every application across every
+ * drive, filterable" rather than one-drive-at-a-time (listApplicationsForDrive
+ * above) — same shape, same allowlisted include, just without the
+ * `jobRole: { driveId }` constraint, plus a driveId filter for when a
+ * caller does want to narrow to one.
+ */
+export async function listAllApplications(filters?: {
+  driveId?: string;
+  status?: string;
+  statuses?: string[];
+  search?: string;
+  branchId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ applications: ApplicationWithDetails[]; total: number }> {
+  const where: any = {};
+
+  if (filters?.driveId) where.jobRole = { driveId: filters.driveId };
+  if (filters?.status) where.status = filters.status;
+  // Phase 12 — `statuses` (plural) backs the Shortlisting queue's "pending
+  // decision" filter (APPLIED/UNDER_REVIEW); kept separate from `status`
+  // (singular, exact match) so existing callers are unaffected.
+  if (filters?.statuses?.length) where.status = { in: filters.statuses };
+  if (filters?.branchId) {
+    where.student = { ...(where.student ?? {}), batch: { branchId: filters.branchId } };
+  }
+  if (filters?.search) {
+    where.OR = [
+      { student: { firstName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { lastName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { enrollmentNumber: { contains: filters.search, mode: "insensitive" } } },
+      { jobRole: { title: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [applications, total] = await Promise.all([
+    prisma.application.findMany({
+      where,
+      include: applicationInclude,
+      orderBy: { appliedAt: "desc" },
+      skip: filters?.offset || 0,
+      take: filters?.limit || 50,
+    }),
+    prisma.application.count({ where }),
+  ]);
+
+  return { applications, total };
+}
+
 export async function listStudentApplications(
   studentId: string,
   filters?: {

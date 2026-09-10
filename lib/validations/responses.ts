@@ -156,3 +156,145 @@ export const roundEligibleApplicationsResponseSchema = z.object({
     })
   ),
 });
+
+// ─── GET /api/admin/applications ───────────────────────────────────────────
+// Phase 12 — cross-drive applications list (Admin + Faculty top-level pages).
+
+export const allApplicationsResponseSchema = z.object({
+  applications: z.array(
+    z.object({
+      id: z.string(),
+      status: z.string(),
+      appliedAt: z.string(),
+      student: z.object({
+        id: z.string(),
+        enrollmentNumber: z.string(),
+        firstName: z.string().nullable(),
+        lastName: z.string().nullable(),
+        batch: z.object({
+          academicYear: z.string(),
+          branch: z.object({ code: z.string(), name: z.string() }),
+        }),
+        academicRecord: z.object({ currentCgpa: z.number().nullable() }).nullable(),
+      }),
+      jobRole: z.object({
+        id: z.string(),
+        title: z.string(),
+        drive: z.object({ id: z.string(), title: z.string(), company: z.object({ name: z.string() }) }),
+      }),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
+
+// ─── GET /api/admin/drives (read-only consumers: Faculty drives list) ─────
+// Phase 12.
+
+export const drivesListResponseSchema = z.object({
+  drives: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      academicYear: z.string(),
+      status: z.string(),
+      company: z.object({ name: z.string() }),
+      _count: z.object({ jobRoles: z.number(), applications: z.number() }),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
+
+// ─── GET /api/admin/attendance ─────────────────────────────────────────────
+// Phase 12 — cross-drive rounds/attendance overview (Admin + Faculty).
+
+export const attendanceOverviewResponseSchema = z.object({
+  rounds: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      type: z.string(),
+      scheduledAt: z.string().nullable(),
+      isCompleted: z.boolean(),
+      drive: z.object({ id: z.string(), title: z.string(), company: z.object({ name: z.string() }) }),
+      participantCount: z.number(),
+      markedCount: z.number(),
+      presentCount: z.number(),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
+
+// ─── GET /api/admin/rounds ──────────────────────────────────────────────────
+// Phase 12 — cross-drive rounds overview (Admin-only).
+
+export const roundsOverviewResponseSchema = z.object({
+  rounds: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      type: z.string(),
+      mode: z.string(),
+      scheduledAt: z.string().nullable(),
+      venue: z.string().nullable(),
+      isCompleted: z.boolean(),
+      drive: z.object({ id: z.string(), title: z.string(), company: z.object({ name: z.string() }) }),
+      participantCount: z.number(),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
+
+// ─── GET /api/hod/applications ─────────────────────────────────────────────
+// Phase 12.
+
+export const hodApplicationsResponseSchema = z.object({
+  applications: z.array(
+    z.object({
+      id: z.string(),
+      status: z.string(),
+      appliedAt: z.string(),
+      student: z.object({
+        id: z.string(),
+        enrollmentNumber: z.string(),
+        firstName: z.string().nullable(),
+        lastName: z.string().nullable(),
+        batch: z.object({
+          academicYear: z.string(),
+          branch: z.object({ code: z.string(), name: z.string() }),
+        }),
+        academicRecord: z.object({ currentCgpa: z.number().nullable() }).nullable(),
+      }),
+      jobRole: z.object({
+        id: z.string(),
+        title: z.string(),
+        drive: z.object({ id: z.string(), title: z.string(), company: z.object({ name: z.string() }) }),
+      }),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
+
+// ─── GET /api/hod/offers ────────────────────────────────────────────────────
+// Phase 12.
+
+export const hodOffersResponseSchema = z.object({
+  offers: z.array(
+    z.object({
+      id: z.string(),
+      status: z.string(),
+      ctc: z.number().nullable(),
+      stipend: z.number().nullable(),
+      offerDate: z.string(),
+      student: z.object({
+        id: z.string(),
+        enrollmentNumber: z.string(),
+        firstName: z.string().nullable(),
+        lastName: z.string().nullable(),
+        batch: z.object({ branch: z.object({ code: z.string() }) }),
+      }),
+      company: z.object({ name: z.string() }),
+      jobRole: z.object({ title: z.string() }),
+    })
+  ),
+  pagination: z.object({ total: z.number() }),
+});
