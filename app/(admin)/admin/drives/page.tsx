@@ -39,6 +39,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DriveForm } from "@/components/admin/drive-form";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 
 interface Drive {
   id: string;
@@ -88,6 +89,7 @@ const WORK_MODE_OPTIONS = [
 export default function DrivesPage() {
   const [drives, setDrives] = useState<Drive[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [academicYearFilter, setAcademicYearFilter] = useState<string>("all");
@@ -100,6 +102,7 @@ export default function DrivesPage() {
   const fetchDrives = useCallback(async () => {
     try {
       setLoading(true);
+      setError(false);
       const params = new URLSearchParams();
 
       if (searchQuery) params.set("search", searchQuery);
@@ -111,8 +114,12 @@ export default function DrivesPage() {
 
       const data = await response.json();
       setDrives(data.drives);
-    } catch (error) {
-      console.error("Error fetching drives:", error);
+    } catch (err) {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found and
+      // fixed on admin/companies and student/opportunities — this page
+      // shares the identical pre-error-state-convention pattern.
+      console.error("Error fetching drives:", err);
+      setError(true);
       toast({
         title: "Error",
         description: "Failed to load drives",
@@ -244,6 +251,10 @@ export default function DrivesPage() {
         <LoadingSpinner />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState onRetry={fetchDrives} />;
   }
 
   return (

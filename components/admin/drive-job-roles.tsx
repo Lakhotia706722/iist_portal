@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { JobRoleForm } from "@/components/admin/job-role-form";
 
@@ -57,6 +58,7 @@ interface DriveJobRolesProps {
 export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingRole, setEditingRole] = useState<JobRole | null>(null);
   const [deletingRole, setDeletingRole] = useState<JobRole | null>(null);
@@ -67,13 +69,17 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   const fetchJobRoles = useCallback(async () => {
     try {
       setLoading(true);
+      setError(false);
       const response = await fetch(`/api/admin/drives/${driveId}/roles`);
       if (!response.ok) throw new Error("Failed to fetch job roles");
 
       const data = await response.json();
       setJobRoles(data.jobRoles);
-    } catch (error) {
-      console.error("Error fetching job roles:", error);
+    } catch (err) {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // admin/companies and student/opportunities.
+      console.error("Error fetching job roles:", err);
+      setError(true);
       toast({
         title: "Error",
         description: "Failed to load job roles",
@@ -127,6 +133,10 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
         <LoadingSpinner />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState onRetry={fetchJobRoles} />;
   }
 
   return (

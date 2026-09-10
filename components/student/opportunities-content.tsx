@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { OpportunityCard } from "./opportunity-card";
 import { OpportunitiesFilters } from "./opportunities-filters";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw } from "lucide-react";
@@ -61,6 +62,7 @@ export function OpportunitiesContent({
   const [data, setData] = useState<OpportunitiesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
   const params = useSearchParams();
@@ -83,6 +85,7 @@ export function OpportunitiesContent({
     else setLoading(true);
 
     try {
+      setError(false);
       const queryParams = new URLSearchParams();
       if (currentFilters.search) queryParams.set("search", currentFilters.search);
       if (currentFilters.industry) queryParams.set("industry", currentFilters.industry);
@@ -99,8 +102,14 @@ export function OpportunitiesContent({
       const result: OpportunitiesResponse = await response.json();
       setData(result);
 
-    } catch (error) {
-      console.error("Failed to fetch opportunities:", error);
+    } catch (err) {
+      // Phase 11: this only ever showed a toast (auto-dismisses) and left
+      // `data` null, which the render treated identically to "zero real
+      // opportunities" — a genuine fetch failure showed the same "No
+      // opportunities found" empty state as an honestly-empty list. Same
+      // class of bug as admin/companies/page.tsx, found the same way.
+      console.error("Failed to fetch opportunities:", err);
+      setError(true);
       toast({
         title: "Error",
         description: "Failed to load opportunities. Please try again.",
@@ -153,6 +162,10 @@ export function OpportunitiesContent({
         <LoadingSpinner size="lg" />
       </div>
     );
+  }
+
+  if (error && !data) {
+    return <ErrorState onRetry={() => fetchOpportunities()} />;
   }
 
   const opportunities = data?.opportunities || [];

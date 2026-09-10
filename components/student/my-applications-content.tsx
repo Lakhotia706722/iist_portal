@@ -16,6 +16,7 @@ import { ApplicationCard } from "./application-card";
 import { ApplicationsFilters } from "./applications-filters";
 import { ApplicationsStats } from "./applications-stats";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw, FileText } from "lucide-react";
@@ -88,6 +89,7 @@ export function MyApplicationsContent({
   const [data, setData] = useState<ApplicationsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const router = useRouter();
@@ -111,6 +113,7 @@ export function MyApplicationsContent({
     else setLoading(true);
 
     try {
+      setError(false);
       const queryParams = new URLSearchParams();
       if (currentFilters.search) queryParams.set("search", currentFilters.search);
       if (currentFilters.status) queryParams.set("status", currentFilters.status);
@@ -119,7 +122,7 @@ export function MyApplicationsContent({
       queryParams.set("offset", currentFilters.offset.toString());
 
       const response = await fetch(`/api/student/applications?${queryParams.toString()}`);
-      
+
       if (!response.ok) {
         throw new Error(await response.text());
       }
@@ -127,8 +130,11 @@ export function MyApplicationsContent({
       const result: ApplicationsResponse = await response.json();
       setData(result);
 
-    } catch (error) {
-      console.error("Failed to fetch applications:", error);
+    } catch (err) {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // several other Phase-3-era pages this audit swept.
+      console.error("Failed to fetch applications:", err);
+      setError(true);
       toast({
         title: "Error",
         description: "Failed to load applications. Please try again.",
@@ -201,6 +207,10 @@ export function MyApplicationsContent({
         <LoadingSpinner size="lg" />
       </div>
     );
+  }
+
+  if (error && !data) {
+    return <ErrorState onRetry={() => fetchApplications()} />;
   }
 
   const applications = data?.applications || [];

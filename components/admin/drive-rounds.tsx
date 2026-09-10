@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -362,6 +363,7 @@ function AddParticipantsDialog({
 export function DriveRounds({ driveId, driveStatus }: Props) {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRound, setEditingRound] = useState<Round | null>(null);
   const [expandedRound, setExpandedRound] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
 
   const fetchRounds = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const res = await fetch(`/api/admin/drives/${driveId}/rounds`);
       if (!res.ok) throw new Error();
@@ -385,6 +388,9 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
       roundListResponseSchema.parse(data);
       setRounds(data.rounds ?? []);
     } catch {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // several other pages this audit swept.
+      setError(true);
       toast({ title: "Error", description: "Failed to load rounds.", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -472,6 +478,8 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
   };
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
+
+  if (error) return <ErrorState onRetry={fetchRounds} />;
 
   return (
     <div className="space-y-4">

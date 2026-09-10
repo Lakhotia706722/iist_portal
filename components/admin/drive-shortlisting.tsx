@@ -10,10 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { useToast } from "@/hooks/use-toast";
 import {
   UserCheck, Filter, Upload, Search, CheckSquare, Square,
-  ChevronUp, ChevronDown, RefreshCw, Download, X
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Download, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchJson } from "@/lib/api-client";
@@ -52,6 +53,7 @@ export function DriveShortlisting({ driveId }: Props) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -66,10 +68,20 @@ export function DriveShortlisting({ driveId }: Props) {
   const csvRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Phase 11: this fetched a hardcoded `limit=100` with no offset and no
+  // pagination controls at all — a drive with more than 100 applicants
+  // (a realistic volume for a large company drive) had every applicant
+  // past the 100th completely invisible here, with no way to reach them
+  // to shortlist/reject/search among them. Found via a data-volume check
+  // with 120 real applicants seeded against one drive.
+  const PAGE_SIZE = 100;
+  const [page, setPage] = useState(0);
+
   const fetchApplicants = useCallback(async (quiet = false) => {
     quiet ? setRefreshing(true) : setLoading(true);
+    setError(false);
     try {
-      const p = new URLSearchParams({ limit: "100" });
+      const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
       if (statusFilter) p.set("status", statusFilter);
       if (search) p.set("search", search);
       // fetchJson catches exactly the class of bug this endpoint had
@@ -87,6 +99,11 @@ export function DriveShortlisting({ driveId }: Props) {
       // unpaginated page, but was quietly wrong).
       setTotal(data.pagination.total);
     } catch {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // several other pages this audit swept — "No applicants found"
+      // used to render identically for a genuinely empty drive and one
+      // whose fetch just failed.
+      setError(true);
       toast({ title: "Error", description: "Failed to load applicants.", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -94,11 +111,16 @@ export function DriveShortlisting({ driveId }: Props) {
     }
     // Intentionally excludes `search`: search is applied client-side to the
     // fetched page (see `displayed` below), so re-fetching per keystroke
-    // would be wasteful — only the status filter triggers a re-fetch.
+    // would be wasteful — only the status filter (and page) trigger a refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driveId, statusFilter, toast]);
+  }, [driveId, statusFilter, page, toast]);
 
   useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
+
+  // Changing the status filter (or search) makes the previous page
+  // number potentially meaningless against the new, smaller result set —
+  // reset to the first page whenever either changes.
+  useEffect(() => { setPage(0); }, [statusFilter, search]);
 
   /* ── filtering / sorting (client-side) ── */
   const displayed = applicants
@@ -243,6 +265,8 @@ export function DriveShortlisting({ driveId }: Props) {
   const roles = Array.from(new Map(applicants.map(a => [a.jobRole.id, a.jobRole.title])).entries());
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
+
+  if (error) return <ErrorState onRetry={() => fetchApplicants()} />;
 
   return (
     <div className="space-y-4">
@@ -411,6 +435,22 @@ export function DriveShortlisting({ driveId }: Props) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            {total === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

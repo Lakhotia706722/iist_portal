@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { JourneyTracker, buildJourneySteps } from "./journey-tracker";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -99,23 +100,32 @@ function SummaryPill({ applications }: { applications: Application[] }) {
 export function JourneyPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/student/applications?limit=50");
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setApplications(data.applications ?? []);
-      } catch {
-        toast({ title: "Error", description: "Failed to load journey data.", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetchApplications = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch("/api/student/applications?limit=50");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setApplications(data.applications ?? []);
+    } catch {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // admin/companies, admin/drives, and student/opportunities — this
+      // page's "No applications yet" empty state used to render
+      // identically whether the student genuinely had zero applications
+      // or the fetch had just failed.
+      setError(true);
+      toast({ title: "Error", description: "Failed to load journey data.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   }, [toast]);
+
+  useEffect(() => { fetchApplications(); }, [fetchApplications]);
 
   const toggle = (id: string) =>
     setExpanded(prev => {
@@ -125,6 +135,8 @@ export function JourneyPage() {
     });
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>;
+
+  if (error) return <ErrorState onRetry={fetchApplications} />;
 
   if (applications.length === 0) {
     return (

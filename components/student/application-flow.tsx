@@ -431,7 +431,20 @@ export function ApplicationFlow({
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back
                 </Button>
-                <Button onClick={handleSubmitApplication} className="bg-green-600 hover:bg-green-700">
+                <Button
+                  onClick={handleSubmitApplication}
+                  disabled={submitting}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {/* Phase 11: this had no disabled-while-pending guard at
+                      all — a fast double-click could fire
+                      handleSubmitApplication twice before the
+                      setCurrentStep("submitting") re-render removes this
+                      button, sending two concurrent POSTs. The service's
+                      own duplicate-application check is a safety net
+                      either way (see negative-path-validation.spec.ts's
+                      concurrency coverage), but the button should not
+                      invite the race in the first place. */}
                   Submit Application
                 </Button>
               </div>
