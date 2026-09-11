@@ -20,32 +20,25 @@ const STATUS_OPTIONS = [
 
 /** Phase 12 — department-scoped applications for the HOD portal. */
 export function HodApplicationsClient() {
-  const [applicants, setApplicants] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
-  const fetchApplications = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: an admin acting on a department student's application.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["hod-applications", search, statusFilter],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: "100" });
       if (search) p.set("search", search);
       if (statusFilter) p.set("status", statusFilter);
-      const data = await fetchJson(`/api/hod/applications?${p}`, hodApplicationsResponseSchema);
-      setApplicants(data.applications);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, statusFilter]);
+      return fetchJson(`/api/hod/applications?${p}`, hodApplicationsResponseSchema);
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applicants = data?.applications ?? [];
 
-  useEffect(() => { fetchApplications(); }, [fetchApplications]);
-
-  if (loading) return <LoadingState text="Loading applications…" />;
-  if (error) return <ErrorState onRetry={fetchApplications} />;
+  if (isLoading) return <LoadingState text="Loading applications…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">

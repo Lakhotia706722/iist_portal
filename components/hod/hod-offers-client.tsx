@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -13,30 +14,24 @@ import { Search, Award } from "lucide-react";
 
 /** Phase 12 — department-scoped offers for the HOD portal. */
 export function HodOffersClient() {
-  const [offers, setOffers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchOffers = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: an admin recording/accepting an offer for a
+  // department student.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["hod-offers", search],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: "100" });
       if (search) p.set("search", search);
-      const data = await fetchJson(`/api/hod/offers?${p}`, hodOffersResponseSchema);
-      setOffers(data.offers);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+      return fetchJson(`/api/hod/offers?${p}`, hodOffersResponseSchema);
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const offers = data?.offers ?? [];
 
-  useEffect(() => { fetchOffers(); }, [fetchOffers]);
-
-  if (loading) return <LoadingState text="Loading offers…" />;
-  if (error) return <ErrorState onRetry={fetchOffers} />;
+  if (isLoading) return <LoadingState text="Loading offers…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">

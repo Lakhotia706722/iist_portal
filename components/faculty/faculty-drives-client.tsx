@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -19,30 +20,24 @@ import { Search, Briefcase } from "lucide-react";
  * TP_ADMIN).
  */
 export function FacultyDrivesClient() {
-  const [drives, setDrives] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchDrives = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: admin publishing/updating a drive. Slower interval —
+  // drives change far less often than an applicant list.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["faculty-drives", search],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: "100" });
       if (search) p.set("search", search);
-      const data = await fetchJson(`/api/admin/drives?${p}`, drivesListResponseSchema);
-      setDrives(data.drives);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+      return fetchJson(`/api/admin/drives?${p}`, drivesListResponseSchema);
+    },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+  });
+  const drives = data?.drives ?? [];
 
-  useEffect(() => { fetchDrives(); }, [fetchDrives]);
-
-  if (loading) return <LoadingState text="Loading drives…" />;
-  if (error) return <ErrorState onRetry={fetchDrives} />;
+  if (isLoading) return <LoadingState text="Loading drives…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">
