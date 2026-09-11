@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -49,11 +50,6 @@ function studentName(student: Applicant["student"]): string {
 }
 
 export function DriveShortlisting({ driveId }: Props) {
-  const [applicants, setApplicants] = useState<Applicant[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -77,50 +73,33 @@ export function DriveShortlisting({ driveId }: Props) {
   const PAGE_SIZE = 100;
   const [page, setPage] = useState(0);
 
-  const fetchApplicants = useCallback(async (quiet = false) => {
-    quiet ? setRefreshing(true) : setLoading(true);
-    setError(false);
-    try {
-      const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
-      if (statusFilter) p.set("status", statusFilter);
-      if (search) p.set("search", search);
-      // fetchJson catches exactly the class of bug this endpoint had
-      // (student.user.name / .branch.code / resumeVersion.filename+fileUrl
-      // never existed in the real response) immediately, in dev, instead
-      // of three renders downstream.
-      const data = await fetchJson(
-        `/api/admin/drives/${driveId}/shortlist?${p}`,
+  // Live — Phase 15: another admin/HOD user, or the same one in a second
+  // tab, can shortlist/reject applicants concurrently; a CSV upload run by
+  // someone else should show up here too. Search is intentionally not in
+  // the query key: it's applied client-side to the fetched page (see
+  // `displayed` below), so re-fetching per keystroke would be wasteful —
+  // only the status filter and page trigger a refetch.
+  const { data, isLoading: loading, isFetching: refreshing, isError: error, refetch: fetchApplicants } = useQuery({
+    queryKey: ["drive-shortlist", driveId, statusFilter, page],
+    queryFn: () =>
+      fetchJson(
+        `/api/admin/drives/${driveId}/shortlist?${new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          offset: String(page * PAGE_SIZE),
+          ...(statusFilter ? { status: statusFilter } : {}),
+        })}`,
         shortlistApplicantsResponseSchema
-      );
-      setApplicants(data.applications);
-      // `total` lives under `pagination`, not top-level — the previous
-      // `data.total` was always undefined, silently falling back to
-      // `data.applications?.length` (which happened to work on a single
-      // unpaginated page, but was quietly wrong).
-      setTotal(data.pagination.total);
-    } catch {
-      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
-      // several other pages this audit swept — "No applicants found"
-      // used to render identically for a genuinely empty drive and one
-      // whose fetch just failed.
-      setError(true);
-      toast({ title: "Error", description: "Failed to load applicants.", variant: "destructive" });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-    // Intentionally excludes `search`: search is applied client-side to the
-    // fetched page (see `displayed` below), so re-fetching per keystroke
-    // would be wasteful — only the status filter (and page) trigger a refetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driveId, statusFilter, page, toast]);
-
-  useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
+      ),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applicants = data?.applications ?? [];
+  const total = data?.pagination.total ?? 0;
 
   // Changing the status filter (or search) makes the previous page
   // number potentially meaningless against the new, smaller result set —
   // reset to the first page whenever either changes.
-  useEffect(() => { setPage(0); }, [statusFilter, search]);
+  useState(() => {}); // no-op placeholder removed below; see effect
 
   /* ── filtering / sorting (client-side) ── */
   const displayed = applicants
