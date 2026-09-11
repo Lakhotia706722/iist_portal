@@ -409,17 +409,27 @@ export async function listActiveOpportunities(filters?: {
   const where: any = {
     status: "APPLICATIONS_OPEN",
     company: { isActive: true },
-    applicationCloseAt: {
-      gt: new Date(), // Not yet closed
-    },
+    // Phase 13 — a drive with no close date set (a real, normal case — the
+    // form field is optional) was being excluded entirely by a bare `{gt:
+    // now}` filter, which a null never satisfies. APPLICATIONS_OPEN is the
+    // authoritative "is this open" signal; a close date, when set, is an
+    // additional automatic cutoff on top of that, not a requirement for
+    // visibility. Found because this exact path (a drive created through
+    // the real admin form, with the close-date field left blank, expected
+    // to then actually appear to a student) had never been exercised
+    // end-to-end before — every prior test either set a close date or
+    // bypassed this list entirely with a direct Application insert.
+    AND: [{ OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }] }],
   };
 
   if (filters?.search) {
-    where.OR = [
-      { title: { contains: filters.search, mode: "insensitive" } },
-      { company: { name: { contains: filters.search, mode: "insensitive" } } },
-      { jobRoles: { some: { title: { contains: filters.search, mode: "insensitive" } } } },
-    ];
+    where.AND.push({
+      OR: [
+        { title: { contains: filters.search, mode: "insensitive" } },
+        { company: { name: { contains: filters.search, mode: "insensitive" } } },
+        { jobRoles: { some: { title: { contains: filters.search, mode: "insensitive" } } } },
+      ],
+    });
   }
 
   if (filters?.industry) {

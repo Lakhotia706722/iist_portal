@@ -36,6 +36,12 @@ export const ELIGIBILITY_FIELDS = [
   "CGPA", "ACTIVE_BACKLOGS", "TOTAL_BACKLOGS", "BATCH", "BRANCH",
   "COURSE", "GENDER", "CATEGORY", "PLACEMENT_STATUS", "PROFILE_STATUS",
   "TENTH_PERCENTAGE", "TWELFTH_PERCENTAGE", "CURRENT_SEMESTER",
+  // Phase 13 — lib/eligibility-engine/index.ts has handled this case since
+  // Phase 3, but it was never in this enum, so the API/UI could never
+  // actually submit a SKILLUP_SCORE rule: dead engine code, found while
+  // proving eligibility rules can factor in a real SkillUp result end to
+  // end.
+  "SKILLUP_SCORE",
 ] as const;
 
 export const ELIGIBILITY_OPERATORS = ["GTE", "LTE", "EQ", "IN", "NOT_IN"] as const;

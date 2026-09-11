@@ -178,7 +178,11 @@ export function ApplicationFlow({
           <div>
             <h2 className="text-xl font-semibold">Apply for Position</h2>
             <p className="text-sm text-muted-foreground">
-              Step {getStepNumber(currentStep)} of 3
+              {/* "submitting" is a transient overlay on step 3, not a 4th
+                  step the circles below represent — Phase 13 found this
+                  showing the confusing "Step 4 of 3" while a real
+                  end-to-end apply was in flight. */}
+              Step {Math.min(getStepNumber(currentStep), 3)} of 3
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={onCancel}>

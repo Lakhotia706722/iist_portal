@@ -7,7 +7,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Target, Edit, Trash2, Users, DollarSign } from "lucide-react";
+import { Plus, Target, Edit, Trash2, Users, DollarSign, ShieldCheck } from "lucide-react";
+import { EligibilityRulesDialog } from "@/components/admin/eligibility-rules-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +64,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
   const [editingRole, setEditingRole] = useState<JobRole | null>(null);
   const [deletingRole, setDeletingRole] = useState<JobRole | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [eligibilityRole, setEligibilityRole] = useState<JobRole | null>(null);
 
   const { toast } = useToast();
 
@@ -204,6 +206,10 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
                   
                   {canEdit && (
                     <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" className="gap-1" onClick={() => setEligibilityRole(role)}>
+                        <ShieldCheck className="h-4 w-4" />
+                        Eligibility
+                      </Button>
                       <Button variant="outline" size="sm" className="gap-1" onClick={() => setEditingRole(role)}>
                         <Edit className="h-4 w-4" />
                         Edit
@@ -235,7 +241,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
                   </div>
                 )}
 
-                {role.eligibilityRules.length > 0 && (
+                {role.eligibilityRules.length > 0 ? (
                   <div>
                     <h4 className="text-sm font-medium mb-2">Eligibility Criteria ({role.eligibilityRules.length} rules)</h4>
                     <div className="grid gap-2 sm:grid-cols-2">
@@ -251,6 +257,11 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
                       )}
                     </div>
                   </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No eligibility rules set — every student can apply.
+                    {canEdit && " Use the “Eligibility” button above to restrict by branch, CGPA, etc."}
+                  </p>
                 )}
                 
                 {role.locations.length > 0 && (
@@ -316,6 +327,18 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
         onConfirm={handleDelete}
         loading={deleting}
       />
+
+      {eligibilityRole && (
+        <EligibilityRulesDialog
+          driveId={driveId}
+          jobRoleId={eligibilityRole.id}
+          jobRoleTitle={eligibilityRole.title}
+          rules={eligibilityRole.eligibilityRules}
+          open={!!eligibilityRole}
+          onOpenChange={(open) => !open && setEligibilityRole(null)}
+          onSaved={fetchJobRoles}
+        />
+      )}
     </div>
   );
 }
