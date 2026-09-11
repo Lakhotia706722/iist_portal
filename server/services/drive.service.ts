@@ -125,7 +125,7 @@ export async function createDrive(data: DriveInput, createdById: string): Promis
     },
   });
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ export async function listDrives(filters?: {
   ]);
 
   return {
-    drives: drives as unknown as DriveWithDetails[],
+    drives,
     total,
   };
 }
@@ -228,7 +228,7 @@ export async function getDriveById(id: string): Promise<DriveWithDetails> {
     throw new NotFoundError("Placement drive not found");
   }
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ export async function updateDrive(
     newValues: parsedData as Record<string, unknown>,
   });
 
-  return drive as unknown as DriveWithDetails;
+  return drive;
 }
 
 // ─── Status Management ────────────────────────────────────────────────────────
@@ -369,9 +369,9 @@ export async function updateDriveStatus(
   });
 
   // Send notifications for certain transitions
-  await handleStatusNotifications(updatedDrive as unknown as DriveWithDetails, newStatus);
+  await handleStatusNotifications(updatedDrive, newStatus);
 
-  return updatedDrive as unknown as DriveWithDetails;
+  return updatedDrive;
 }
 
 // ─── Student-Facing Queries ───────────────────────────────────────────────────
@@ -409,17 +409,27 @@ export async function listActiveOpportunities(filters?: {
   const where: any = {
     status: "APPLICATIONS_OPEN",
     company: { isActive: true },
-    applicationCloseAt: {
-      gt: new Date(), // Not yet closed
-    },
+    // Phase 13 — a drive with no close date set (a real, normal case — the
+    // form field is optional) was being excluded entirely by a bare `{gt:
+    // now}` filter, which a null never satisfies. APPLICATIONS_OPEN is the
+    // authoritative "is this open" signal; a close date, when set, is an
+    // additional automatic cutoff on top of that, not a requirement for
+    // visibility. Found because this exact path (a drive created through
+    // the real admin form, with the close-date field left blank, expected
+    // to then actually appear to a student) had never been exercised
+    // end-to-end before — every prior test either set a close date or
+    // bypassed this list entirely with a direct Application insert.
+    AND: [{ OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }] }],
   };
 
   if (filters?.search) {
-    where.OR = [
-      { title: { contains: filters.search, mode: "insensitive" } },
-      { company: { name: { contains: filters.search, mode: "insensitive" } } },
-      { jobRoles: { some: { title: { contains: filters.search, mode: "insensitive" } } } },
-    ];
+    where.AND.push({
+      OR: [
+        { title: { contains: filters.search, mode: "insensitive" } },
+        { company: { name: { contains: filters.search, mode: "insensitive" } } },
+        { jobRoles: { some: { title: { contains: filters.search, mode: "insensitive" } } } },
+      ],
+    });
   }
 
   if (filters?.industry) {
@@ -492,6 +502,12 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
       value: string;
     }>;
   }>;
+  contactInfo: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    designation: string | null;
+  };
 }> {
   const drive = await prisma.placementDrive.findUnique({
     where: { 
@@ -533,7 +549,23 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
     throw new NotFoundError("Opportunity not found or not available");
   }
 
-  return drive as any;
+  // The frontend (opportunity-detail-content.tsx) expects a nested
+  // `contactInfo` object — PlacementDrive stores these as flat scalar
+  // fields (pointOfContact/pocEmail/pocPhone), so they must be reshaped
+  // here rather than returned raw. The previous `return drive as any`
+  // hid this mismatch from tsc entirely and crashed the page on every
+  // single opportunity (TypeError: Cannot read properties of undefined
+  // (reading 'name')) — found via Phase 9's real-browser verification,
+  // not by the type checker or an API-level check.
+  return {
+    ...drive,
+    contactInfo: {
+      name: drive.pointOfContact,
+      email: drive.pocEmail,
+      phone: drive.pocPhone,
+      designation: null, // no such field on PlacementDrive
+    },
+  };
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────

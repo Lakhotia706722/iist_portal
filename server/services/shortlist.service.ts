@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { PlacementNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
 import { writeAuditLog } from "./audit.service";
+import { getStorageAdapter } from "@/lib/storage";
 
 export type ShortlistableApplication = {
   id: string;
@@ -19,9 +20,9 @@ export type ShortlistableApplication = {
   student: {
     id: string;
     enrollmentNumber: string;
-    firstName: string;
-    lastName: string;
-    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    user: { email: string };
     batch: {
       academicYear: string;
       branch: {
@@ -46,6 +47,7 @@ export type ShortlistableApplication = {
   };
   resumeVersion: {
     fileKey: string | null;
+    fileUrl: string | null;
   } | null;
 };
 
@@ -152,11 +154,33 @@ export async function listShortlistableApplications(
   const [applications, total, statusStats, roleStats, branchApplications] = await Promise.all([
     prisma.application.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        status: true,
+        appliedAt: true,
         student: {
-          include: {
-            batch: { include: { branch: true } },
-            academicRecord: true,
+          select: {
+            id: true,
+            enrollmentNumber: true,
+            firstName: true,
+            lastName: true,
+            user: { select: { email: true } },
+            batch: {
+              select: {
+                academicYear: true,
+                branch: { select: { code: true, name: true } },
+              },
+            },
+            academicRecord: {
+              select: {
+                currentCgpa: true,
+                currentSemester: true,
+                activeBacklogs: true,
+                totalBacklogs: true,
+                tenthPercentage: true,
+                twelfthPercentage: true,
+              },
+            },
           },
         },
         jobRole: {
@@ -217,8 +241,21 @@ export async function listShortlistableApplications(
     ? cgpaValues.reduce((sum, cgpa) => sum + cgpa, 0) / cgpaValues.length
     : 0;
 
+  const storage = getStorageAdapter();
+  const applicationsWithResumeUrls: ShortlistableApplication[] = await Promise.all(
+    applications.map(async (app) => ({
+      ...app,
+      resumeVersion: app.resumeVersion
+        ? {
+            fileKey: app.resumeVersion.fileKey,
+            fileUrl: app.resumeVersion.fileKey ? await storage.getSignedUrl(app.resumeVersion.fileKey) : null,
+          }
+        : null,
+    }))
+  );
+
   return {
-    applications: applications as unknown as ShortlistableApplication[],
+    applications: applicationsWithResumeUrls,
     total,
     stats: {
       byStatus: statusStats.reduce(
@@ -337,75 +374,100 @@ export async function bulkShortlistApplications(
 
 // ─── CSV-based Shortlisting ───────────────────────────────────────────────────
 
+// Phase 10: rewritten to match the CSV-upload panel's own documented
+// per-row format (enrollmentNumber, action, optional note) — see the
+// comment on csvShortlistSchema for what was wrong before. Applications
+// are matched by enrollment number *within this drive*, across whichever
+// job role they applied to (the CSV has no jobRoleId column), since a
+// student can only have one shortlistable application per drive in the
+// common case; the rare case of more than one is treated as ambiguous
+// and reported back as a failed row rather than guessed at.
 export async function shortlistFromCsv(
+  driveId: string,
   data: CsvShortlistInput,
   changedById?: string
 ): Promise<{
   processed: number;
   shortlisted: number;
+  rejected: number;
   failed: Array<{ enrollmentNumber: string; reason: string }>;
 }> {
-  // Find applications by enrollment numbers for the specific job role
+  const enrollmentNumbers = data.rows.map(r => r.enrollmentNumber);
+
   const applications = await prisma.application.findMany({
     where: {
-      jobRoleId: data.jobRoleId,
-      student: {
-        enrollmentNumber: { in: data.enrollmentNumbers },
-      },
+      jobRole: { driveId },
+      student: { enrollmentNumber: { in: enrollmentNumbers } },
       status: { in: ["APPLIED", "UNDER_REVIEW"] },
     },
     include: {
-      student: {
-        select: {
-          id: true,
-          enrollmentNumber: true,
-        },
-      },
-      jobRole: {
-        include: {
-          drive: { include: { company: true } },
-        },
-      },
+      student: { select: { id: true, enrollmentNumber: true } },
+      jobRole: { include: { drive: { include: { company: true } } } },
     },
   });
 
-  const foundEnrollments = applications.map(app => app.student.enrollmentNumber);
-  const notFoundEnrollments = data.enrollmentNumbers.filter(
-    num => !foundEnrollments.includes(num)
-  );
-
-  if (applications.length === 0) {
-    throw new ValidationError("No valid applications found for the provided enrollment numbers");
+  // Group matches by enrollment number to detect the ambiguous case.
+  const byEnrollment = new Map<string, typeof applications>();
+  for (const app of applications) {
+    const list = byEnrollment.get(app.student.enrollmentNumber) ?? [];
+    list.push(app);
+    byEnrollment.set(app.student.enrollmentNumber, list);
   }
 
-  // Update applications to shortlisted
-  const updateResult = await prisma.$transaction(async (tx) => {
-    const applicationIds = applications.map(app => app.id);
+  const failed: Array<{ enrollmentNumber: string; reason: string }> = [];
+  const shortlistIds: string[] = [];
+  const rejectIds: string[] = [];
+  // application -> the row's action, kept for per-row notes/notifications
+  const resolved: Array<{ app: (typeof applications)[number]; action: "SHORTLISTED" | "REJECTED"; note?: string }> = [];
 
-    await tx.application.updateMany({
-      where: { id: { in: applicationIds } },
-      data: { status: ApplicationStatus.SHORTLISTED },
+  for (const row of data.rows) {
+    const matches = byEnrollment.get(row.enrollmentNumber);
+    if (!matches || matches.length === 0) {
+      failed.push({ enrollmentNumber: row.enrollmentNumber, reason: "No shortlistable application found for this enrollment number in this drive" });
+      continue;
+    }
+    if (matches.length > 1) {
+      failed.push({ enrollmentNumber: row.enrollmentNumber, reason: "Multiple applications found for this enrollment number in this drive — use the bulk selection UI instead" });
+      continue;
+    }
+    const app = matches[0];
+    (row.action === "SHORTLISTED" ? shortlistIds : rejectIds).push(app.id);
+    resolved.push({ app, action: row.action, note: row.note || undefined });
+  }
+
+  if (resolved.length === 0) {
+    throw new ValidationError("No valid applications found for the provided rows");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (shortlistIds.length > 0) {
+      await tx.application.updateMany({
+        where: { id: { in: shortlistIds } },
+        data: { status: ApplicationStatus.SHORTLISTED },
+      });
+    }
+    if (rejectIds.length > 0) {
+      await tx.application.updateMany({
+        where: { id: { in: rejectIds } },
+        data: { status: ApplicationStatus.REJECTED },
+      });
+    }
+
+    await tx.applicationStatusHistory.createMany({
+      data: resolved.map(({ app, action, note }) => ({
+        applicationId: app.id,
+        toStatus: action === "SHORTLISTED" ? ApplicationStatus.SHORTLISTED : ApplicationStatus.REJECTED,
+        note: note || "Updated via CSV upload",
+      })),
     });
-
-    const statusHistoryData = applicationIds.map(applicationId => ({
-      applicationId,
-      toStatus: ApplicationStatus.SHORTLISTED,
-      note: data.note || "Shortlisted via CSV upload",
-    }));
-
-    await tx.applicationStatusHistory.createMany({ data: statusHistoryData });
-
-    return { shortlisted: applicationIds.length };
   });
 
   // Send notifications
   try {
-    const notificationPromises = applications.map(app =>
-      PlacementNotifications.shortlisted(
-        app.student.id,
-        app.jobRole.drive.company.name,
-        app.jobRole.title
-      )
+    const notificationPromises = resolved.map(({ app, action }) =>
+      action === "SHORTLISTED"
+        ? PlacementNotifications.shortlisted(app.student.id, app.jobRole.drive.company.name, app.jobRole.title)
+        : PlacementNotifications.rejected(app.student.id, app.jobRole.drive.company.name, app.jobRole.title)
     );
 
     await Promise.allSettled(notificationPromises);
@@ -417,24 +479,22 @@ export async function shortlistFromCsv(
     userId: changedById,
     action: "STATUS_CHANGE",
     entity: "Application",
-    newValues: { status: "SHORTLISTED" },
+    newValues: { status: "MIXED" },
     metadata: {
       operation: "shortlistFromCsv",
-      jobRoleId: data.jobRoleId,
-      processed: data.enrollmentNumbers.length,
-      shortlisted: updateResult.shortlisted,
-      notFound: notFoundEnrollments,
-      note: data.note ?? null,
+      driveId,
+      processed: data.rows.length,
+      shortlisted: shortlistIds.length,
+      rejected: rejectIds.length,
+      failed,
     },
   });
 
   return {
-    processed: data.enrollmentNumbers.length,
-    shortlisted: updateResult.shortlisted,
-    failed: notFoundEnrollments.map(num => ({
-      enrollmentNumber: num,
-      reason: "No shortlistable application found for this enrollment number",
-    })),
+    processed: data.rows.length,
+    shortlisted: shortlistIds.length,
+    rejected: rejectIds.length,
+    failed,
   };
 }
 
@@ -539,7 +599,7 @@ export async function exportShortlistData(
   const exportData = applications.map(app => ({
     enrollmentNumber: app.student.enrollmentNumber,
     name: `${app.student.firstName} ${app.student.lastName}`,
-    email: app.student.email,
+    email: app.student.user.email,
     branch: app.student.batch.branch.code,
     batch: app.student.batch.academicYear,
     cgpa: app.student.academicRecord?.currentCgpa || null,

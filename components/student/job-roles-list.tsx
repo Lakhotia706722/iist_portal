@@ -223,12 +223,16 @@ export function JobRolesList({
                       </div>
                     )}
 
-                    {/* Expand/Collapse Button */}
+                    {/* Expand/Collapse Button — icon-only, so it needs an
+                        accessible name of its own (a11y gap fixed in
+                        Phase 13, found while writing a real-browser test
+                        against this exact button). */}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleRoleExpanded(jobRole.id)}
                       className="h-8 w-8 p-0"
+                      aria-label={isExpanded ? "Hide eligibility details" : "Show eligibility details"}
                     >
                       {isExpanded ? (
                         <ChevronUp className="h-4 w-4" />

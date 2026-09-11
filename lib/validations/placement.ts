@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalNumber } from "./common";
 
 // ─── Constants (mirrors Prisma enums) ────────────────────────────────────────
 
@@ -35,6 +36,12 @@ export const ELIGIBILITY_FIELDS = [
   "CGPA", "ACTIVE_BACKLOGS", "TOTAL_BACKLOGS", "BATCH", "BRANCH",
   "COURSE", "GENDER", "CATEGORY", "PLACEMENT_STATUS", "PROFILE_STATUS",
   "TENTH_PERCENTAGE", "TWELFTH_PERCENTAGE", "CURRENT_SEMESTER",
+  // Phase 13 — lib/eligibility-engine/index.ts has handled this case since
+  // Phase 3, but it was never in this enum, so the API/UI could never
+  // actually submit a SKILLUP_SCORE rule: dead engine code, found while
+  // proving eligibility rules can factor in a real SkillUp result end to
+  // end.
+  "SKILLUP_SCORE",
 ] as const;
 
 export const ELIGIBILITY_OPERATORS = ["GTE", "LTE", "EQ", "IN", "NOT_IN"] as const;
@@ -87,10 +94,10 @@ export const jobRoleSchema = z.object({
   description: z.string().max(5000).optional().or(z.literal("")),
   responsibilities: z.string().max(5000).optional().or(z.literal("")),
   requirements: z.string().max(3000).optional().or(z.literal("")),
-  ctcMin: z.coerce.number().min(0).optional(),
-  ctcMax: z.coerce.number().min(0).optional(),
+  ctcMin: optionalNumber(z.coerce.number().min(0)),
+  ctcMax: optionalNumber(z.coerce.number().min(0)),
   ctcBreakdown: z.string().max(500).optional().or(z.literal("")),
-  openings: z.coerce.number().int().min(1).optional(),
+  openings: optionalNumber(z.coerce.number().int().min(1)),
   skills: z.array(z.string().min(1).max(100)).default([]),
   workMode: z.enum(WORK_MODES).default("ONSITE"),
   locations: z.array(z.string().min(1).max(100)).default([]),
@@ -138,7 +145,7 @@ export const roundSchema = z.object({
   type: z.enum(ROUND_TYPES).default("OTHER"),
   mode: z.enum(ROUND_MODES).default("OFFLINE"),
   scheduledAt: z.string().optional().or(z.literal("")),
-  durationMins: z.coerce.number().int().min(1).optional(),
+  durationMins: optionalNumber(z.coerce.number().int().min(1)),
   venue: z.string().max(300).optional().or(z.literal("")),
   meetingLink: z.string().url("Enter a valid URL").optional().or(z.literal("")),
   instructions: z.string().max(3000).optional().or(z.literal("")),
@@ -177,11 +184,25 @@ export const bulkShortlistSchema = z.object({
   note: z.string().max(500).optional().or(z.literal("")),
 });
 
+// Phase 10: previously { enrollmentNumbers: string[], jobRoleId: string,
+// note? } — a shape that (a) could only ever shortlist, never reject,
+// despite the CSV-upload panel's own help text documenting an `action`
+// column ("shortlist"/"reject") per row, and (b) required a single
+// jobRoleId for the whole file, which the documented CSV format (no
+// jobRoleId column) never provided. The panel's fetch call also posted
+// the file as multipart FormData to an endpoint that only ever called
+// `request.json()` on it — CSV upload had never actually worked. Fixed by
+// matching the documented, per-row format: the client parses the CSV
+// (see drive-shortlisting.tsx) and posts `{ rows }` as JSON, one action
+// per row, scoped to the drive already in the URL — no jobRoleId needed.
 export const csvShortlistSchema = z.object({
-  // enrollment numbers from CSV, mapped to applications
-  enrollmentNumbers: z.array(z.string().min(1)).min(1),
-  jobRoleId: z.string().min(1),
-  note: z.string().max(500).optional().or(z.literal("")),
+  rows: z.array(
+    z.object({
+      enrollmentNumber: z.string().min(1),
+      action: z.enum(["SHORTLISTED", "REJECTED"]),
+      note: z.string().max(500).optional().or(z.literal("")),
+    })
+  ).min(1),
 });
 
 // ─── Drive status change ──────────────────────────────────────────────────────

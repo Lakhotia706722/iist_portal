@@ -58,6 +58,7 @@ function scoreColor(score: number) {
 }
 
 export function MockInterviewsClient() {
+  // Live — Phase 15: faculty schedule/record results, not this student.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["student-interviews"],
     queryFn: async () => {
@@ -65,6 +66,8 @@ export function MockInterviewsClient() {
       if (!res.ok) throw new Error("Failed to load your interviews");
       return res.json() as Promise<{ interviews: Interview[]; summary: Summary }>;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading your interviews…" />;

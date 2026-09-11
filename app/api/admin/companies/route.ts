@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const company = await createCompany(validatedData, uploadedLogoKey);
+    const company = await createCompany(validatedData, uploadedLogoKey, session.user.id);
 
     return NextResponse.json({
       message: "Company created successfully",

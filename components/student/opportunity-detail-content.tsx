@@ -19,6 +19,7 @@ import { ApplicationFlow } from "./application-flow";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Clock, AlertCircle } from "lucide-react";
+import { opportunityDetailResponseSchema } from "@/lib/validations/responses";
 
 interface OpportunityData {
   id: string;
@@ -116,7 +117,13 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
         throw new Error(await response.text());
       }
 
-      const result: OpportunityDetailResponse = await response.json();
+      // This route used to return `drive as any` with no `contactInfo` at
+      // all — parsing the real response through the schema here means that
+      // exact class of mismatch throws immediately instead of crashing
+      // three renders later on opportunity.contactInfo.name.
+      const raw = await response.json();
+      opportunityDetailResponseSchema.parse(raw);
+      const result: OpportunityDetailResponse = raw;
       setData(result);
     } catch (error) {
       console.error("Failed to fetch opportunity details:", error);

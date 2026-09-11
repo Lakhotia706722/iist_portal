@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Briefcase, ClipboardList, Award, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,45 @@ export default async function StudentDashboard() {
   });
 
   const isProfileComplete = (student?.onboardingStep ?? 0) >= 2;
+
+  /**
+   * Phase 13 — every stat and "recent" section on this page used to be a
+   * hardcoded "—" and a literal "Available from Phase 2 onwards." string,
+   * regardless of how much real data existed. Same where-clause
+   * listActiveOpportunities() (drive.service.ts) uses for "currently open,
+   * not yet closed" so this number matches what the Opportunities page
+   * itself would show.
+   */
+  const activeOpportunitiesWhere = {
+    status: "APPLICATIONS_OPEN" as const,
+    company: { isActive: true },
+    // A drive with no close date set is still open — see the matching
+    // comment in listActiveOpportunities() (drive.service.ts).
+    OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }],
+  };
+
+  const [activeOpportunitiesCount, applicationCount, offerCount, recentOpportunities, recentApplications] = student
+    ? await Promise.all([
+        prisma.placementDrive.count({ where: activeOpportunitiesWhere }),
+        prisma.application.count({ where: { studentId: student.id } }),
+        prisma.offer.count({ where: { studentId: student.id } }),
+        prisma.placementDrive.findMany({
+          where: activeOpportunitiesWhere,
+          select: { id: true, title: true, company: { select: { name: true } }, applicationCloseAt: true },
+          orderBy: { applicationCloseAt: "asc" },
+          take: 3,
+        }),
+        prisma.application.findMany({
+          where: { studentId: student.id },
+          select: {
+            id: true, status: true, appliedAt: true,
+            jobRole: { select: { title: true, drive: { select: { company: { select: { name: true } } } } } },
+          },
+          orderBy: { appliedAt: "desc" },
+          take: 3,
+        }),
+      ])
+    : [0, 0, 0, [], []];
 
   return (
     <div className="space-y-6">
@@ -42,9 +82,9 @@ export default async function StudentDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Active Opportunities", value: "—", icon: Briefcase, color: "text-blue-600", bg: "bg-blue-50" },
-          { label: "Applications Submitted", value: "—", icon: ClipboardList, color: "text-violet-600", bg: "bg-violet-50" },
-          { label: "Offers Received", value: "—", icon: Award, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Active Opportunities", value: activeOpportunitiesCount, icon: Briefcase, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Applications Submitted", value: applicationCount, icon: ClipboardList, color: "text-violet-600", bg: "bg-violet-50" },
+          { label: "Offers Received", value: offerCount, icon: Award, color: "text-emerald-600", bg: "bg-emerald-50" },
           { label: "Profile Status", value: isProfileComplete ? "Complete" : "Incomplete", icon: UserCheck, color: isProfileComplete ? "text-emerald-600" : "text-amber-600", bg: isProfileComplete ? "bg-emerald-50" : "bg-amber-50" },
         ].map((stat) => (
           <Card key={stat.label}>
@@ -85,14 +125,51 @@ export default async function StudentDashboard() {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        {["Recent Opportunities", "My Applications"].map((title) => (
-          <Card key={title}>
-            <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground py-6 text-center">Available from Phase 2 onwards.</p>
-            </CardContent>
-          </Card>
-        ))}
+        <Card>
+          <CardHeader><CardTitle className="text-base">Recent Opportunities</CardTitle></CardHeader>
+          <CardContent>
+            {recentOpportunities.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No open opportunities right now — check back soon.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentOpportunities.map((o) => (
+                  <Link key={o.id} href="/student/opportunities" className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted/50">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{o.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{o.company.name}</p>
+                    </div>
+                    {o.applicationCloseAt && (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        closes {new Date(o.applicationCloseAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">My Applications</CardTitle></CardHeader>
+          <CardContent>
+            {recentApplications.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">You haven&apos;t applied to anything yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {recentApplications.map((a) => (
+                  <Link key={a.id} href="/student/applications" className="flex items-center justify-between rounded-lg border p-3 text-sm hover:bg-muted/50">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{a.jobRole.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{a.jobRole.drive.company.name}</p>
+                    </div>
+                    <StatusBadge status={a.status} className="shrink-0 text-xs" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

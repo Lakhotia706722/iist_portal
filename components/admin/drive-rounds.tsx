@@ -9,57 +9,84 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Pencil, Trash2, ChevronDown, ChevronUp,
-  CheckCircle, XCircle, Clock, RefreshCw, Users
+  CheckCircle, XCircle, Clock, RefreshCw, Users, UserPlus, CheckSquare, Square
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { roundListResponseSchema, roundEligibleApplicationsResponseSchema, roundParticipantsResponseSchema } from "@/lib/validations/responses";
+import { fetchJson } from "@/lib/api-client";
 
 /* ── types ────────────────────────────────────────────── */
 interface Round {
   id: string;
+  roundNumber: number;
   title: string;
   type: string;
   mode: string;
   scheduledAt: string | null;
-  durationMinutes: number | null;
+  durationMins: number | null;
   venue: string | null;
   instructions: string | null;
   participantCount?: number;
 }
 
+// Matches getRoundById()'s real RoundWithDetails.participants shape (see
+// round.service.ts) — student.user, participant.status, and
+// participant.feedback never existed; the real fields are
+// firstName/lastName, attendance.status, and remarks. This component's own
+// copy of the same GET .../participants call never had a route handler at
+// all until Phase 10, so this mismatch was entirely latent — the crash
+// below only became reachable once real data started flowing through.
 interface Participant {
   id: string;
-  studentId: string;
-  student: { enrollmentNumber: string; user: { name: string } };
-  status: string;
+  application: {
+    student: { enrollmentNumber: string; firstName: string | null; lastName: string | null };
+  };
   result: string | null;
-  feedback: string | null;
-  attendanceStatus: string | null;
+  remarks: string | null;
+  attendance: { status: string } | null;
 }
 
 interface Props { driveId: string; driveStatus: string }
 
-const ROUND_TYPES = ["APTITUDE", "TECHNICAL", "GROUP_DISCUSSION", "HR", "CASE_STUDY", "ASSIGNMENT", "OTHER"];
+// Must match RoundType / ApplicationStatus enums in prisma/schema.prisma —
+// this list previously used invented values ("APTITUDE", "TECHNICAL", "HR",
+// "CASE_STUDY", "ASSIGNMENT") that never matched RoundType, so selecting
+// most of them and saving would 400.
+const ROUND_TYPES = [
+  "WRITTEN_TEST", "APTITUDE_TEST", "CODING_TEST", "TECHNICAL_INTERVIEW",
+  "HR_INTERVIEW", "GROUP_DISCUSSION", "PRESENTATION", "MEDICAL",
+  "DOCUMENT_VERIFICATION", "OTHER",
+];
 const ROUND_MODES = ["ONLINE", "OFFLINE", "HYBRID"];
-const RESULT_OPTIONS = ["PASSED", "FAILED", "ON_HOLD"];
-const ATTENDANCE_OPTIONS = ["PRESENT", "ABSENT", "EXEMPTED"];
+// participantResultSchema's real enum is PASS/FAIL/PENDING/HOLD, not
+// PASSED/FAILED/ON_HOLD.
+const RESULT_OPTIONS = ["PASS", "FAIL", "PENDING", "HOLD"];
+// AttendanceStatus enum is PRESENT/ABSENT/LATE/EXCUSED — "EXEMPTED" was
+// never a real value and "LATE" was missing.
+const ATTENDANCE_OPTIONS = ["PRESENT", "ABSENT", "LATE", "EXCUSED"];
 
 /* ── round form ───────────────────────────────────────── */
 function RoundForm({
   initial, onSave, onCancel,
 }: {
   initial?: Partial<Round>;
-  onSave: (data: Omit<Round, "id" | "participantCount">) => void;
+  onSave: (data: {
+    title: string; type: string; mode: string;
+    scheduledAt?: string; durationMins?: number; venue?: string; instructions?: string;
+  }) => void;
   onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     title: initial?.title ?? "",
-    type: initial?.type ?? "TECHNICAL",
+    type: initial?.type ?? "TECHNICAL_INTERVIEW",
     mode: initial?.mode ?? "OFFLINE",
     scheduledAt: initial?.scheduledAt?.slice(0, 16) ?? "",
-    durationMinutes: initial?.durationMinutes?.toString() ?? "",
+    durationMins: initial?.durationMins?.toString() ?? "",
     venue: initial?.venue ?? "",
     instructions: initial?.instructions ?? "",
   });
@@ -99,7 +126,7 @@ function RoundForm({
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Duration (minutes)</label>
-            <Input type="number" value={form.durationMinutes} onChange={set("durationMinutes")} placeholder="60" />
+            <Input type="number" value={form.durationMins} onChange={set("durationMins")} placeholder="60" />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Venue / Link</label>
@@ -119,9 +146,13 @@ function RoundForm({
           <Button size="sm" disabled={!form.title}
             onClick={() => onSave({
               title: form.title, type: form.type, mode: form.mode,
-              scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : null,
-              durationMinutes: form.durationMinutes ? parseInt(form.durationMinutes) : null,
-              venue: form.venue || null, instructions: form.instructions || null,
+              // roundSchema's optional fields accept undefined or "" — not
+              // null. Sending null (the previous behavior) always 400'd
+              // for any round with an empty optional field, i.e. every
+              // round that didn't fill in every single field.
+              scheduledAt: form.scheduledAt ? new Date(form.scheduledAt).toISOString() : undefined,
+              durationMins: form.durationMins ? parseInt(form.durationMins) : undefined,
+              venue: form.venue || undefined, instructions: form.instructions || undefined,
             })}>
             Save Round
           </Button>
@@ -136,15 +167,18 @@ function AttendanceRow({ p, onUpdate }: {
   p: Participant;
   onUpdate: (id: string, attendance: string, result?: string, feedback?: string) => void;
 }) {
-  const [attendance, setAttendance] = useState(p.attendanceStatus ?? "");
+  const [attendance, setAttendance] = useState(p.attendance?.status ?? "");
   const [result, setResult] = useState(p.result ?? "");
-  const [feedback, setFeedback] = useState(p.feedback ?? "");
+  const [feedback, setFeedback] = useState(p.remarks ?? "");
+  const studentName =
+    [p.application.student.firstName, p.application.student.lastName].filter(Boolean).join(" ") ||
+    p.application.student.enrollmentNumber;
 
   return (
     <tr className="border-b hover:bg-muted/20">
       <td className="p-3">
-        <p className="font-medium text-sm">{p.student.user.name}</p>
-        <p className="text-xs text-muted-foreground">{p.student.enrollmentNumber}</p>
+        <p className="font-medium text-sm">{studentName}</p>
+        <p className="text-xs text-muted-foreground">{p.application.student.enrollmentNumber}</p>
       </td>
       <td className="p-3">
         <Select value={attendance} onValueChange={v => { setAttendance(v); onUpdate(p.id, v, result, feedback); }}>
@@ -176,27 +210,187 @@ function AttendanceRow({ p, onUpdate }: {
   );
 }
 
+/* ── add participants dialog ─────────────────────────────
+ * Phase 10 P0 — the missing piece: shortlisting and attendance marking
+ * were both real, but nothing on the admin side ever connected a
+ * shortlisted applicant to a round's participant list. This dialog lists
+ * everyone eligible (shortlisted or further along, per the same status
+ * list the backend itself validates against) and not already a
+ * participant of this round, and lets the admin add one or many at once —
+ * the same individual-or-bulk pattern shortlisting itself uses.
+ */
+function AddParticipantsDialog({
+  roundId, open, onOpenChange, onAdded,
+}: {
+  roundId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [eligible, setEligible] = useState<
+    Array<{
+      id: string;
+      status: string;
+      student: {
+        id: string;
+        enrollmentNumber: string;
+        firstName: string | null;
+        lastName: string | null;
+        batch: { branch: { code: string } };
+      };
+      jobRole: { title: string };
+    }>
+  >([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!open) return;
+    setSelected(new Set());
+    setLoading(true);
+    fetchJson(
+      `/api/admin/rounds/${roundId}/participants?action=eligible`,
+      roundEligibleApplicationsResponseSchema
+    )
+      .then((data) => setEligible(data.applications))
+      .catch(() => toast({ title: "Error", description: "Failed to load eligible applicants.", variant: "destructive" }))
+      .finally(() => setLoading(false));
+  }, [open, roundId, toast]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected((prev) => (prev.size === eligible.length ? new Set() : new Set(eligible.map((a) => a.id))));
+
+  const handleAdd = async () => {
+    if (selected.size === 0) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/admin/rounds/${roundId}/participants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ applicationIds: [...selected] }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || "Failed to add participants");
+      }
+      toast({ title: "Success", description: `${selected.size} participant(s) added.` });
+      onAdded();
+      onOpenChange(false);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add participants",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Add Participants</DialogTitle>
+          <DialogDescription>
+            Applicants shortlisted (or further along) for this drive who aren&apos;t in this round yet.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <div className="flex justify-center py-8"><LoadingSpinner /></div>
+        ) : eligible.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No eligible applicants — everyone shortlisted for this drive is already in this round.
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+            >
+              {selected.size === eligible.length
+                ? <CheckSquare className="h-4 w-4 text-primary" />
+                : <Square className="h-4 w-4" />}
+              Select all ({eligible.length})
+            </button>
+            <div className="space-y-1 max-h-96 overflow-y-auto rounded-md border">
+              {eligible.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => toggle(a.id)}
+                  className="flex w-full items-center gap-3 border-b p-3 text-left text-sm last:border-b-0 hover:bg-muted/40"
+                >
+                  {selected.has(a.id)
+                    ? <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
+                    : <Square className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                  <span className="flex-1">
+                    <span className="font-medium">
+                      {[a.student.firstName, a.student.lastName].filter(Boolean).join(" ") || a.student.enrollmentNumber}
+                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {a.student.enrollmentNumber} · {a.student.batch.branch.code} · {a.jobRole.title}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button size="sm" disabled={selected.size === 0 || submitting} onClick={handleAdd}>
+                {submitting && <LoadingSpinner size="sm" className="mr-2" />}
+                Add {selected.size > 0 ? selected.size : ""} participant{selected.size === 1 ? "" : "s"}
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── main component ───────────────────────────────────── */
 export function DriveRounds({ driveId, driveStatus }: Props) {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRound, setEditingRound] = useState<Round | null>(null);
   const [expandedRound, setExpandedRound] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Record<string, Participant[]>>({});
   const [loadingParticipants, setLoadingParticipants] = useState<Set<string>>(new Set());
+  const [addParticipantsRoundId, setAddParticipantsRoundId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const canEdit = ["APPLICATIONS_CLOSED", "ONGOING", "SHORTLISTING"].includes(driveStatus);
 
   const fetchRounds = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const res = await fetch(`/api/admin/drives/${driveId}/rounds`);
       if (!res.ok) throw new Error();
       const data = await res.json();
+      // Validates the fields this component previously got wrong
+      // (roundNumber, durationMins) before trusting the richer local Round
+      // type for the rest — see roundListResponseSchema for why it's a
+      // partial mirror, not a full one.
+      roundListResponseSchema.parse(data);
       setRounds(data.rounds ?? []);
     } catch {
+      // Phase 11: same fetch-failure-looks-like-empty-list bug found on
+      // several other pages this audit swept.
+      setError(true);
       toast({ title: "Error", description: "Failed to load rounds.", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -206,10 +400,8 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
   const fetchParticipants = async (roundId: string) => {
     setLoadingParticipants(p => new Set([...p, roundId]));
     try {
-      const res = await fetch(`/api/admin/rounds/${roundId}/participants`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setParticipants(prev => ({ ...prev, [roundId]: data.participants ?? [] }));
+      const data = await fetchJson(`/api/admin/rounds/${roundId}/participants`, roundParticipantsResponseSchema);
+      setParticipants(prev => ({ ...prev, [roundId]: data.participants }));
     } catch {
       toast({ title: "Error", description: "Failed to load participants.", variant: "destructive" });
     } finally {
@@ -228,15 +420,25 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
     }
   };
 
-  const saveRound = async (data: Omit<Round, "id" | "participantCount">) => {
+  const saveRound = async (data: {
+    title: string; type: string; mode: string;
+    scheduledAt?: string; durationMins?: number; venue?: string; instructions?: string;
+  }) => {
     try {
       const url = editingRound
         ? `/api/admin/rounds/${editingRound.id}`
         : `/api/admin/drives/${driveId}/rounds`;
+      // roundSchema requires roundNumber (unique per drive) — preserve it
+      // on edit, assign the next available one on create. This was never
+      // sent before, so every round creation 400'd.
+      const payload = {
+        ...data,
+        roundNumber: editingRound?.roundNumber ?? rounds.length + 1,
+      };
       const res = await fetch(url, {
         method: editingRound ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
       toast({ title: editingRound ? "Round updated" : "Round created" });
@@ -277,6 +479,8 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
 
+  if (error) return <ErrorState onRetry={fetchRounds} />;
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -299,7 +503,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
 
       {rounds.length === 0 ? (
         <EmptyState
-          icon="users"
+          icon={Users}
           title="No rounds yet"
           description={canEdit ? "Create the first selection round for this drive." : "Rounds can be added once applications close."}
           action={canEdit ? { label: "Add First Round", onClick: () => setShowForm(true) } : undefined}
@@ -344,7 +548,7 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
                                 })}
                               </span>
                             )}
-                            {round.durationMinutes && <span>{round.durationMinutes} min</span>}
+                            {round.durationMins && <span>{round.durationMins} min</span>}
                             {round.venue && <span>{round.venue}</span>}
                             {round.participantCount !== undefined && (
                               <span className="flex items-center gap-1">
@@ -379,7 +583,19 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
                             {round.instructions}
                           </p>
                         )}
-                        <h4 className="font-medium text-sm mb-3">Attendance & Results</h4>
+                        <div className="mb-3 flex items-center justify-between">
+                          <h4 className="font-medium text-sm">Attendance & Results</h4>
+                          {canEdit && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => { e.stopPropagation(); setAddParticipantsRoundId(round.id); }}
+                            >
+                              <UserPlus className="h-3.5 w-3.5 mr-1.5" />
+                              Add Participants
+                            </Button>
+                          )}
+                        </div>
                         {loadingPs ? (
                           <div className="flex justify-center py-6"><LoadingSpinner /></div>
                         ) : !ps || ps.length === 0 ? (
@@ -413,6 +629,18 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
             );
           })}
         </div>
+      )}
+
+      {addParticipantsRoundId && (
+        <AddParticipantsDialog
+          roundId={addParticipantsRoundId}
+          open={!!addParticipantsRoundId}
+          onOpenChange={(open) => !open && setAddParticipantsRoundId(null)}
+          onAdded={() => {
+            fetchParticipants(addParticipantsRoundId);
+            fetchRounds();
+          }}
+        />
       )}
     </div>
   );

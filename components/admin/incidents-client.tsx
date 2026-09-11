@@ -140,6 +140,13 @@ export function IncidentsClient({ studentId }: { studentId?: string }) {
       setForm({ ...EMPTY_FORM, studentId: studentId ?? "" });
       setFormError(null);
       qc.invalidateQueries({ queryKey: ["admin-incidents"] });
+      // Phase 10: the compliance status card on this same page (see
+      // AdminStudentCompliancePage) reads its own ["compliance", endpoint]
+      // query — recording an incident here never told it to refetch, so
+      // an admin recording a HIGH/CRITICAL incident saw the incident
+      // appear in the list below while the status card above it kept
+      // showing the stale pre-incident status until a manual reload.
+      qc.invalidateQueries({ queryKey: ["compliance"] });
     },
     onError: (e: Error) => {
       setFormError(e.message);
@@ -162,6 +169,10 @@ export function IncidentsClient({ studentId }: { studentId?: string }) {
       toast({ title: "Incident updated", variant: "success" });
       setEditTarget(null);
       qc.invalidateQueries({ queryKey: ["admin-incidents"] });
+      // Same reasoning as the create mutation above — resolving/dismissing
+      // an incident (or changing its severity) also changes the derived
+      // compliance status.
+      qc.invalidateQueries({ queryKey: ["compliance"] });
     },
     onError: (e: Error) =>
       toast({ title: "Update failed", description: e.message, variant: "destructive" }),

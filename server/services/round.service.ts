@@ -208,10 +208,68 @@ export async function createRound(
     },
   });
 
-  return round as unknown as RoundWithDetails;
+  return round;
 }
 
 // ─── Read Rounds ──────────────────────────────────────────────────────────────
+
+// ─── Cross-drive rounds overview (Phase 12) ────────────────────────────────
+// Backs the top-level "Rounds" nav page (Admin-only) — every existing round
+// tool (listRounds above, createRound, updateRound) is scoped to one drive
+// at a time; this is the "every round, across every drive" queue that
+// nav-config.tsx pointed at but never had a page behind.
+
+export async function listRoundsOverview(filters?: {
+  driveId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  rounds: Array<{
+    id: string;
+    title: string;
+    type: string;
+    mode: string;
+    scheduledAt: Date | null;
+    venue: string | null;
+    isCompleted: boolean;
+    drive: { id: string; title: string; company: { name: string } };
+    participantCount: number;
+  }>;
+  total: number;
+}> {
+  const where: any = {};
+  if (filters?.driveId) where.driveId = filters.driveId;
+  if (filters?.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: "insensitive" } },
+      { drive: { title: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [rounds, total] = await Promise.all([
+    prisma.placementRound.findMany({
+      where,
+      select: {
+        id: true, title: true, type: true, mode: true, scheduledAt: true, venue: true, isCompleted: true,
+        drive: { select: { id: true, title: true, company: { select: { name: true } } } },
+        _count: { select: { participants: true } },
+      },
+      orderBy: { scheduledAt: "desc" },
+      skip: filters?.offset || 0,
+      take: filters?.limit || 50,
+    }),
+    prisma.placementRound.count({ where }),
+  ]);
+
+  return {
+    rounds: rounds.map((r) => ({
+      id: r.id, title: r.title, type: r.type, mode: r.mode, scheduledAt: r.scheduledAt,
+      venue: r.venue, isCompleted: r.isCompleted, drive: r.drive, participantCount: r._count.participants,
+    })),
+    total,
+  };
+}
 
 export async function listRounds(
   driveId: string,
@@ -259,7 +317,7 @@ export async function listRounds(
   ]);
 
   return {
-    rounds: rounds as unknown as RoundWithDetails[],
+    rounds,
     total,
   };
 }
@@ -298,7 +356,7 @@ export async function getRoundById(id: string): Promise<RoundWithDetails> {
     throw new NotFoundError("Round not found");
   }
 
-  return round as unknown as RoundWithDetails;
+  return round;
 }
 
 // ─── Update Round ─────────────────────────────────────────────────────────────
@@ -331,7 +389,7 @@ export async function updateRound(
     include: roundInclude,
   });
 
-  return round as unknown as RoundWithDetails;
+  return round;
 }
 
 // ─── Delete Round ─────────────────────────────────────────────────────────────
@@ -361,19 +419,15 @@ export async function addParticipants(
   roundId: string,
   applicationIds: string[]
 ): Promise<RoundWithDetails> {
+  // Only round.driveId (a plain scalar, always present) is actually used
+  // below — a `roundFull` query further down separately fetches the
+  // company name for notifications. The `drive: { select: {...} } as any`
+  // this used to have here was never valid Prisma (driveId isn't a field
+  // on PlacementDrive at all) and the `as any` was hiding that — it just
+  // happened to never run, because nothing could reach this function
+  // before Phase 10 built the first real UI path to it.
   const round = await prisma.placementRound.findUnique({
     where: { id: roundId },
-    include: {
-      drive: {
-        select: {
-          driveId: false,
-          id: true,
-          companyId: true,
-          title: false,
-          company: { select: { name: true } },
-        },
-      } as any,
-    },
   });
 
   if (!round) {
@@ -439,6 +493,65 @@ export async function addParticipants(
   }
 
   return await getRoundById(roundId);
+}
+
+/**
+ * Applications for this round's drive that are eligible to be added as
+ * participants (shortlisted or further along, per the same status list
+ * addParticipants() itself validates against) and aren't already in this
+ * round. Phase 10 — this query, the route that exposes it, and the UI that
+ * calls it are what close the gap Phase 9 documented: shortlisting and
+ * attendance marking were both real, but nothing on the admin side ever
+ * connected a shortlisted applicant to a round's participant list.
+ */
+export async function listRoundEligibleApplications(roundId: string): Promise<
+  Array<{
+    id: string;
+    status: string;
+    student: {
+      id: string;
+      enrollmentNumber: string;
+      firstName: string | null;
+      lastName: string | null;
+      batch: { branch: { code: string } };
+    };
+    jobRole: { title: string };
+  }>
+> {
+  const round = await prisma.placementRound.findUnique({
+    where: { id: roundId },
+    select: { driveId: true },
+  });
+  if (!round) throw new NotFoundError("Round not found");
+
+  const existingParticipants = await prisma.roundParticipant.findMany({
+    where: { roundId },
+    select: { applicationId: true },
+  });
+  const existingIds = existingParticipants.map((p) => p.applicationId);
+
+  return prisma.application.findMany({
+    where: {
+      jobRole: { driveId: round.driveId },
+      status: { in: ["SHORTLISTED", "WRITTEN_TEST", "TECHNICAL_ROUND", "HR_ROUND"] as ApplicationStatus[] },
+      id: { notIn: existingIds.length > 0 ? existingIds : undefined },
+    },
+    select: {
+      id: true,
+      status: true,
+      student: {
+        select: {
+          id: true,
+          enrollmentNumber: true,
+          firstName: true,
+          lastName: true,
+          batch: { select: { branch: { select: { code: true } } } },
+        },
+      },
+      jobRole: { select: { title: true } },
+    },
+    orderBy: { student: { enrollmentNumber: "asc" } },
+  });
 }
 
 export async function removeParticipant(
@@ -569,7 +682,7 @@ export async function getParticipantById(id: string): Promise<ParticipantWithDet
     throw new NotFoundError("Participant not found");
   }
 
-  return participant as unknown as ParticipantWithDetails;
+  return participant;
 }
 
 // ─── Bulk Result Updates ──────────────────────────────────────────────────────

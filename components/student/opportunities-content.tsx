@@ -1,22 +1,28 @@
 /**
  * Opportunities Content Component — Phase 3
  * Handles data fetching and display of placement opportunities
+ *
+ * Phase 15 — converted from a raw useState/useEffect/setInterval poll to
+ * TanStack Query so it participates in the same refetchInterval /
+ * refetchIntervalInBackground / notification-fast-path convention as every
+ * other "live" query in the app, instead of its own bespoke 30s timer that
+ * kept running even when the tab was backgrounded.
  */
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { OpportunityCard } from "./opportunity-card";
 import { OpportunitiesFilters } from "./opportunities-filters";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw } from "lucide-react";
 
 interface Opportunity {
@@ -58,15 +64,9 @@ export function OpportunitiesContent({
 }: {
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const [data, setData] = useState<OpportunitiesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const router = useRouter();
-  const params = useSearchParams();
-  const { toast } = useToast();
 
-  // Extract current filters from search params
   const currentFilters = useMemo(
     () => ({
       search: (searchParams.search as string) || "",
@@ -78,11 +78,9 @@ export function OpportunitiesContent({
     [searchParams]
   );
 
-  const fetchOpportunities = useCallback(async (refresh = false) => {
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-
-    try {
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    queryKey: ["student-opportunities", currentFilters],
+    queryFn: async () => {
       const queryParams = new URLSearchParams();
       if (currentFilters.search) queryParams.set("search", currentFilters.search);
       if (currentFilters.industry) queryParams.set("industry", currentFilters.industry);
@@ -91,68 +89,40 @@ export function OpportunitiesContent({
       queryParams.set("offset", currentFilters.offset.toString());
 
       const response = await fetch(`/api/student/opportunities?${queryParams.toString()}`);
+      if (!response.ok) throw new Error(await response.text());
+      return (await response.json()) as OpportunitiesResponse;
+    },
+    // Live — another role (admin) publishing a drive or a company/admin
+    // closing applications must show up here without a manual reload.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
 
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const result: OpportunitiesResponse = await response.json();
-      setData(result);
-
-    } catch (error) {
-      console.error("Failed to fetch opportunities:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load opportunities. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [currentFilters, toast]);
-
-  // Update URL with new filters
   const updateFilters = (newFilters: Partial<typeof currentFilters>) => {
     const params = new URLSearchParams();
-    
-    const filters = { ...currentFilters, ...newFilters, offset: 0 }; // Reset offset on filter change
-    
+    const filters = { ...currentFilters, ...newFilters, offset: 0 };
     if (filters.search) params.set("search", filters.search);
     if (filters.industry) params.set("industry", filters.industry);
     if (filters.workMode) params.set("workMode", filters.workMode);
     if (filters.offset > 0) params.set("offset", filters.offset.toString());
-
     const queryString = params.toString();
     router.push(`/student/opportunities${queryString ? `?${queryString}` : ""}`);
   };
 
-  // Load more opportunities (pagination)
   const loadMore = () => {
     updateFilters({ offset: currentFilters.offset + currentFilters.limit });
   };
 
-  useEffect(() => {
-    fetchOpportunities();
-  }, [fetchOpportunities]);
-
-  // Auto-refresh every 30 seconds to keep countdown timers accurate
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!loading && !refreshing) {
-        fetchOpportunities(true);
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [loading, refreshing, fetchOpportunities]);
-
-  if (loading && !data) {
+  if (isLoading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
         <LoadingSpinner size="lg" />
       </div>
     );
+  }
+
+  if (isError && !data) {
+    return <ErrorState onRetry={() => refetch()} />;
   }
 
   const opportunities = data?.opportunities || [];
@@ -195,14 +165,14 @@ export function OpportunitiesContent({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => fetchOpportunities(true)}
-              disabled={refreshing}
+              onClick={() => refetch()}
+              disabled={isFetching}
               className="shrink-0"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            
+
             {opportunities.length > 0 && (
               <div className="text-sm text-muted-foreground">
                 {pagination?.total} opportunities
@@ -247,7 +217,7 @@ export function OpportunitiesContent({
             <OpportunityCard
               key={opportunity.id}
               opportunity={opportunity}
-              refreshing={refreshing}
+              refreshing={isFetching}
             />
           ))}
         </div>
@@ -259,9 +229,9 @@ export function OpportunitiesContent({
           <Button
             variant="outline"
             onClick={loadMore}
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? (
+            {isLoading ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
                 Loading...

@@ -64,6 +64,10 @@ export function ComplianceView({
   const [overrideReason, setOverrideReason] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
 
+  // Live — Phase 15: derived from application/attendance/document data that
+  // admin staff (or the compliance engine reacting to their actions)
+  // changes; shared by both the student's own compliance page and the
+  // admin/HOD compliance-detail view.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["compliance", endpoint],
     queryFn: async () => {
@@ -71,6 +75,8 @@ export function ComplianceView({
       if (!res.ok) throw new Error("Failed to load compliance status");
       return res.json() as Promise<ComplianceResult>;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const setOverride = useMutation({

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,8 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { JourneyTracker, buildJourneySteps } from "./journey-tracker";
-import { useToast } from "@/hooks/use-toast";
 import {
   Building2, DollarSign, Briefcase, ExternalLink,
   CheckCircle, XCircle, Clock
@@ -97,25 +98,23 @@ function SummaryPill({ applications }: { applications: Application[] }) {
 
 /* ── main component ───────────────────────────────────── */
 export function JourneyPage() {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { toast } = useToast();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/student/applications?limit=50");
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        setApplications(data.applications ?? []);
-      } catch {
-        toast({ title: "Error", description: "Failed to load journey data.", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [toast]);
+  // Live — round/attendance/offer progress here is driven entirely by
+  // admin/faculty actions elsewhere, matching my-applications-content.tsx's
+  // same data.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["student-applications-journey"],
+    queryFn: async () => {
+      const res = await fetch("/api/student/applications?limit=50");
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      return (json.applications ?? []) as Application[];
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applications = data ?? [];
 
   const toggle = (id: string) =>
     setExpanded(prev => {
@@ -124,7 +123,9 @@ export function JourneyPage() {
       return next;
     });
 
-  if (loading) return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>;
+  if (isLoading) return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>;
+
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   if (applications.length === 0) {
     return (

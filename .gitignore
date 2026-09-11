@@ -8,6 +8,13 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# local storage adapter output (STORAGE_DRIVER=local) — dev/E2E file uploads
+/uploads
 
 # next.js
 /.next/

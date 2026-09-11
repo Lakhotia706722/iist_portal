@@ -53,7 +53,13 @@ export function DocumentsClient() {
   const [uploadError, setUploadError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ["student-documents"], queryFn: fetchDocs });
+  // Live — Phase 15: admin staff verify/reject documents, not this student.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["student-documents"],
+    queryFn: fetchDocs,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
 
   const uploadMutation = useMutation({
     mutationFn: async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
@@ -13,6 +13,7 @@ type Notification = {
   subject: string;
   message: string;
   category: string;
+  entityType: string | null;
   priority: string;
   link: string | null;
   readAt: string | null;
@@ -23,6 +24,39 @@ type InboxResponse = {
   notifications: Notification[];
   unreadCount: number;
   total: number;
+};
+
+/**
+ * Phase 15 Step 3 — the notification-triggered fast path. Every
+ * PlacementNotifications.* / AdminNotifications.* call already tags its
+ * row with `entityType` (drive/application/round/offer/document) — this
+ * maps that straight onto the query-key prefixes the "live" queries this
+ * phase wired up actually use, so a fresh notification of a given type
+ * invalidates exactly what it relates to, across whichever role happens to
+ * be viewing (invalidating a query key that role doesn't have cached is a
+ * harmless no-op — this map isn't role-specific on purpose, since the bell
+ * itself is shared by all 5 roles).
+ */
+const ENTITY_QUERY_KEYS: Record<string, string[]> = {
+  drive: ["student-opportunities", "faculty-drives"],
+  application: [
+    "student-applications",
+    "student-applications-journey",
+    "drive-applications",
+    "drive-shortlist",
+    "all-applications",
+    "shortlisting-queue",
+    "hod-applications",
+    "admin-students-directory",
+  ],
+  round: [
+    "student-applications-journey",
+    "round-attendance",
+    "attendance-overview",
+    "rounds-overview",
+  ],
+  offer: ["student-offers", "admin-offers", "hod-offers", "hod-dashboard", "command-center"],
+  document: ["student-documents", "compliance"],
 };
 
 function timeAgo(iso: string) {
@@ -49,10 +83,39 @@ export function NotificationBell() {
       if (!res.ok) throw new Error("Failed to load notifications");
       return res.json() as Promise<InboxResponse>;
     },
-    // Keep the badge roughly current without hammering the API.
-    refetchInterval: 60_000,
+    // Phase 15 — this now does double duty as the fast-path trigger for
+    // every other "live" query (see the effect below), not just keeping
+    // the badge current, so it runs on a tighter interval than before.
+    refetchInterval: 8_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
+
+  // Phase 15 Step 3 — fast-path invalidation. Diffs each poll's result
+  // against the last-seen notification IDs; any genuinely new one
+  // immediately invalidates the query it relates to, rather than waiting
+  // for that query's own independent (slower) poll cycle. The very first
+  // load populates the seen-set without invalidating anything — those
+  // notifications aren't "new," they're just newly fetched.
+  const seenIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const currentIds = new Set(data.notifications.map((n) => n.id));
+    if (seenIds.current === null) {
+      seenIds.current = currentIds;
+      return;
+    }
+    const freshlyArrived = data.notifications.filter((n) => !seenIds.current!.has(n.id));
+    seenIds.current = currentIds;
+    if (freshlyArrived.length === 0) return;
+
+    const keysToInvalidate = new Set<string>();
+    for (const n of freshlyArrived) {
+      const keys = (n.entityType && ENTITY_QUERY_KEYS[n.entityType]) || [];
+      keys.forEach((k) => keysToInvalidate.add(k));
+    }
+    keysToInvalidate.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+  }, [data, qc]);
 
   const markRead = useMutation({
     mutationFn: async (body: { id?: string; all?: boolean }) => {

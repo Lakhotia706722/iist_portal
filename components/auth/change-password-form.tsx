@@ -9,9 +9,11 @@ import { FormField } from "@/components/ui/form-field";
 import { Card, CardContent } from "@/components/ui/card";
 import { Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 export function ChangePasswordForm({ forced }: { forced?: boolean }) {
   const router = useRouter();
+  const { update } = useSession();
   const [done, setDone] = useState(false);
   const [showCur, setShowCur] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -30,6 +32,12 @@ export function ChangePasswordForm({ forced }: { forced?: boolean }) {
     if (res.ok) {
       setDone(true);
       if (forced) {
+        // Same class of bug as academic-info-form.tsx's onboardingStep fix
+        // (see the comment on the jwt() callback in auth.config.ts):
+        // without patching the token, middleware's mustChangePassword gate
+        // still sees the pre-change value and redirects straight back here
+        // forever.
+        await update({ mustChangePassword: false });
         setTimeout(() => { router.push("/dashboard"); router.refresh(); }, 1500);
       }
       return;

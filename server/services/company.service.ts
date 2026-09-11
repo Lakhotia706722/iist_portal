@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { CompanyInput } from "@/lib/validations/placement";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { getStorageAdapter } from "@/lib/storage";
+import { writeAuditLog } from "./audit.service";
 
 export type CompanyWithDrives = {
   id: string;
@@ -39,9 +40,16 @@ const companyInclude = {
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
+// Phase 10: this whole file had no writeAuditLog calls at all — a real gap
+// against ARCHITECTURE.md #5 ("Every state-changing placement action
+// writes an AuditLog row"), found via the P2 audit-log-viewer deep-
+// verification test (a company created through the real UI simply never
+// showed up there). `actorId` is optional to keep every existing call
+// site source-compatible; the route handlers now pass session.user.id.
 export async function createCompany(
   data: CompanyInput,
-  logoKey?: string
+  logoKey?: string,
+  actorId?: string
 ): Promise<CompanyWithDrives> {
   await validateSlugUnique(data.slug);
 
@@ -50,7 +58,15 @@ export async function createCompany(
     include: companyInclude,
   });
 
-  return company as unknown as CompanyWithDrives;
+  await writeAuditLog({
+    userId: actorId,
+    action: "CREATE",
+    entity: "Company",
+    entityId: company.id,
+    newValues: { name: company.name, slug: company.slug, industry: company.industry },
+  });
+
+  return company;
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -89,7 +105,7 @@ export async function listCompanies(filters?: {
   ]);
 
   return {
-    companies: companies as unknown as CompanyWithDrives[],
+    companies,
     total,
   };
 }
@@ -102,7 +118,7 @@ export async function getCompanyById(id: string): Promise<CompanyWithDrives> {
 
   if (!company) throw new NotFoundError("Company not found");
 
-  return company as unknown as CompanyWithDrives;
+  return company;
 }
 
 export async function getCompanyBySlug(slug: string): Promise<CompanyWithDrives> {
@@ -113,7 +129,7 @@ export async function getCompanyBySlug(slug: string): Promise<CompanyWithDrives>
 
   if (!company) throw new NotFoundError("Company not found");
 
-  return company as unknown as CompanyWithDrives;
+  return company;
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -121,11 +137,12 @@ export async function getCompanyBySlug(slug: string): Promise<CompanyWithDrives>
 export async function updateCompany(
   id: string,
   data: Partial<CompanyInput>,
-  newLogoKey?: string
+  newLogoKey?: string,
+  actorId?: string
 ): Promise<CompanyWithDrives> {
   const existing = await prisma.company.findUnique({
     where: { id },
-    select: { id: true, slug: true, logoKey: true },
+    select: { id: true, slug: true, logoKey: true, name: true, industry: true },
   });
 
   if (!existing) throw new NotFoundError("Company not found");
@@ -153,12 +170,21 @@ export async function updateCompany(
     include: companyInclude,
   });
 
-  return company as unknown as CompanyWithDrives;
+  await writeAuditLog({
+    userId: actorId,
+    action: "UPDATE",
+    entity: "Company",
+    entityId: company.id,
+    oldValues: { name: existing.name, industry: existing.industry },
+    newValues: { name: company.name, industry: company.industry },
+  });
+
+  return company;
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
 
-export async function deleteCompany(id: string, force = false): Promise<void> {
+export async function deleteCompany(id: string, force = false, actorId?: string): Promise<void> {
   const company = await prisma.company.findUnique({
     where: { id },
     include: {
@@ -171,10 +197,26 @@ export async function deleteCompany(id: string, force = false): Promise<void> {
   if (!force && company._count.drives > 0) {
     // Soft delete
     await prisma.company.update({ where: { id }, data: { isActive: false } });
+    await writeAuditLog({
+      userId: actorId,
+      action: "STATUS_CHANGE",
+      entity: "Company",
+      entityId: id,
+      oldValues: { isActive: true },
+      newValues: { isActive: false },
+      metadata: { operation: "soft-delete", reason: "has existing drives" },
+    });
     return;
   }
 
   await prisma.company.delete({ where: { id } });
+  await writeAuditLog({
+    userId: actorId,
+    action: "DELETE",
+    entity: "Company",
+    entityId: id,
+    oldValues: { name: company.name, slug: company.slug },
+  });
 
   if (company.logoKey) {
     try {
@@ -185,7 +227,7 @@ export async function deleteCompany(id: string, force = false): Promise<void> {
   }
 }
 
-export async function toggleCompanyStatus(id: string): Promise<CompanyWithDrives> {
+export async function toggleCompanyStatus(id: string, actorId?: string): Promise<CompanyWithDrives> {
   const company = await prisma.company.findUnique({
     where: { id },
     select: { isActive: true },
@@ -199,7 +241,16 @@ export async function toggleCompanyStatus(id: string): Promise<CompanyWithDrives
     include: companyInclude,
   });
 
-  return updated as unknown as CompanyWithDrives;
+  await writeAuditLog({
+    userId: actorId,
+    action: "STATUS_CHANGE",
+    entity: "Company",
+    entityId: id,
+    oldValues: { isActive: company.isActive },
+    newValues: { isActive: updated.isActive },
+  });
+
+  return updated;
 }
 
 // ─── Statistics ───────────────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ import { CompanyForm } from "@/components/admin/company-form";
 import { CompanyStats } from "@/components/admin/company-stats";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 
 interface Company {
   id: string;
@@ -84,6 +85,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [stats, setStats] = useState<CompanyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -97,6 +99,7 @@ export default function CompaniesPage() {
   const fetchCompanies = useCallback(async () => {
     try {
       setLoading(true);
+      setError(false);
       const params = new URLSearchParams();
 
       if (searchQuery) params.set("search", searchQuery);
@@ -110,8 +113,19 @@ export default function CompaniesPage() {
       const data = await response.json();
       setCompanies(data.companies);
       setStats(data.stats);
-    } catch (error) {
-      console.error("Error fetching companies:", error);
+    } catch (err) {
+      // Phase 11: this only ever showed a toast (which auto-dismisses)
+      // and left `companies` at its previous/initial value — on a fresh
+      // load, that's `[]`, so a real fetch failure rendered the exact
+      // same "No companies found" empty state as a genuinely empty list,
+      // silently misrepresenting a server error as "there's just no
+      // data". Found via a real-browser error-state audit that forced
+      // this endpoint to fail and got the empty state instead of a real
+      // error UI — every other admin list page already distinguishes
+      // the two via isError/ErrorState; this one had never been migrated
+      // to that convention.
+      console.error("Error fetching companies:", err);
+      setError(true);
       toast({
         title: "Error",
         description: "Failed to load companies",
@@ -226,6 +240,10 @@ export default function CompaniesPage() {
         <LoadingSpinner />
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState onRetry={fetchCompanies} />;
   }
 
   return (

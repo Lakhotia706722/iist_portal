@@ -23,6 +23,8 @@ import {
   Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchJson } from "@/lib/api-client";
+import { resumeListResponseSchema } from "@/lib/validations/responses";
 
 interface EligibilityResult {
   eligible: boolean;
@@ -35,12 +37,23 @@ interface EligibilityResult {
   }>;
 }
 
+// Matches GET /api/student/resumes' real shape (see resume.service.ts's
+// getResumes() and resume-center-client.tsx's ResumeItem) — a Resume with
+// its single latest ResumeVersion, not a flat filename/fileUrl/uploadedAt
+// object. What actually gets submitted to POST /api/student/applications
+// as `resumeVersionId` must be a ResumeVersion id, not the Resume's own id
+// — the backend validates this and rejects anything else.
+interface ResumeVersionSummary {
+  id: string;
+  fileKey: string | null;
+  createdAt: string;
+}
 interface Resume {
   id: string;
-  filename: string;
-  fileUrl: string;
-  uploadedAt: string;
+  name: string;
   isDefault: boolean;
+  updatedAt: string;
+  versions: ResumeVersionSummary[];
 }
 
 interface ApplicationFlowProps {
@@ -70,14 +83,15 @@ export function ApplicationFlow({
   const fetchResumes = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/student/resumes");
-      if (!response.ok) throw new Error("Failed to fetch resumes");
+      // fetchJson runtime-validates the response against
+      // resumeListResponseSchema — this is exactly the call site that used
+      // to silently read `data.resumes` off a bare array and get `[]`
+      // every time. A shape mismatch now throws immediately instead.
+      const data = await fetchJson("/api/student/resumes", resumeListResponseSchema);
+      setResumes(data);
 
-      const data = await response.json();
-      setResumes(data.resumes || []);
-
-      // Auto-select default resume if available
-      const defaultResume = data.resumes?.find((r: Resume) => r.isDefault);
+      // Auto-select the default resume, if it actually has a version to submit.
+      const defaultResume = data.find((r) => r.isDefault && r.versions.length > 0);
       if (defaultResume) {
         setSelectedResumeId(defaultResume.id);
       }
@@ -101,7 +115,11 @@ export function ApplicationFlow({
   }, [currentStep, fetchResumes]);
 
   const handleSubmitApplication = async () => {
-    if (!selectedResumeId) {
+    // The backend needs a ResumeVersion id, not the Resume id the cards are
+    // selected by — resolve the selected Resume's latest version here,
+    // once, right before submitting.
+    const resumeVersionId = selectedResume?.versions[0]?.id;
+    if (!resumeVersionId) {
       toast({
         title: "Resume Required",
         description: "Please select a resume before submitting your application.",
@@ -119,7 +137,7 @@ export function ApplicationFlow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobRoleId,
-          resumeVersionId: selectedResumeId,
+          resumeVersionId,
           confirmed: true,
         }),
       });
@@ -149,7 +167,8 @@ export function ApplicationFlow({
   };
 
   const canProceedFromEligibility = eligibility.eligible;
-  const canProceedFromResume = selectedResumeId !== null;
+  const selectedResume = resumes.find((r) => r.id === selectedResumeId);
+  const canProceedFromResume = !!selectedResume && selectedResume.versions.length > 0;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -159,7 +178,11 @@ export function ApplicationFlow({
           <div>
             <h2 className="text-xl font-semibold">Apply for Position</h2>
             <p className="text-sm text-muted-foreground">
-              Step {getStepNumber(currentStep)} of 3
+              {/* "submitting" is a transient overlay on step 3, not a 4th
+                  step the circles below represent — Phase 13 found this
+                  showing the confusing "Step 4 of 3" while a real
+                  end-to-end apply was in flight. */}
+              Step {Math.min(getStepNumber(currentStep), 3)} of 3
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -317,13 +340,15 @@ export function ApplicationFlow({
                           <FileText className="h-5 w-5 text-muted-foreground" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="font-medium truncate">{resume.filename}</p>
+                              <p className="font-medium truncate">{resume.name}</p>
                               {resume.isDefault && (
                                 <Badge variant="secondary" className="text-xs">Default</Badge>
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              Uploaded on {new Date(resume.uploadedAt).toLocaleDateString()}
+                              {resume.versions.length > 0
+                                ? `Last updated ${new Date(resume.updatedAt).toLocaleDateString()}`
+                                : "No version uploaded yet — can't be submitted"}
                             </p>
                           </div>
                           {selectedResumeId === resume.id && (
@@ -379,7 +404,7 @@ export function ApplicationFlow({
                   <div>
                     <p className="text-sm text-muted-foreground">Selected Resume</p>
                     <p className="font-medium">
-                      {resumes.find(r => r.id === selectedResumeId)?.filename}
+                      {selectedResume?.name}
                     </p>
                   </div>
 
@@ -410,7 +435,20 @@ export function ApplicationFlow({
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back
                 </Button>
-                <Button onClick={handleSubmitApplication} className="bg-green-600 hover:bg-green-700">
+                <Button
+                  onClick={handleSubmitApplication}
+                  disabled={submitting}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {/* Phase 11: this had no disabled-while-pending guard at
+                      all — a fast double-click could fire
+                      handleSubmitApplication twice before the
+                      setCurrentStep("submitting") re-render removes this
+                      button, sending two concurrent POSTs. The service's
+                      own duplicate-application check is a safety net
+                      either way (see negative-path-validation.spec.ts's
+                      concurrency coverage), but the button should not
+                      invite the race in the first place. */}
                   Submit Application
                 </Button>
               </div>

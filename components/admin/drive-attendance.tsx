@@ -97,6 +97,8 @@ export function DriveAttendance({ driveId }: DriveAttendanceProps) {
     if (!roundId && rounds.length > 0) setRoundId(rounds[0].id);
   }, [rounds, roundId]);
 
+  // Live — Phase 15: another admin/HOD marking attendance on this same
+  // round concurrently should show up here.
   const attendanceQuery = useQuery({
     queryKey: ["round-attendance", roundId],
     queryFn: async () => {
@@ -105,6 +107,8 @@ export function DriveAttendance({ driveId }: DriveAttendanceProps) {
       return res.json() as Promise<AttendanceResponse>;
     },
     enabled: !!roundId,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const markOne = useMutation({

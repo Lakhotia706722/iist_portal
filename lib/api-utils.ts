@@ -38,8 +38,24 @@ export function handleApiError(error: unknown): NextResponse {
       return acc;
     }, {} as Record<string, string>);
 
+    // Phase 11: `error` used to be the hardcoded generic string
+    // "Validation failed", not any real message from the issues below it.
+    // Every consumer that reads `body.error ?? Object.values(body.fieldErrors ?? {})[0] ?? fallback`
+    // (admin-calendar-client.tsx, incidents-client.tsx, interviews-client.tsx,
+    // skillup-client.tsx, offers-client.tsx, ...) therefore always showed
+    // that generic string and never reached the specific field message,
+    // because `??` only falls through on null/undefined, not a non-empty
+    // string — found via a negative-path test expecting SkillUp's own
+    // "Passing marks cannot exceed maximum marks" refine message and
+    // getting "Validation failed" instead. `error` is now the real
+    // issue message(s) — the single most common case (one failed field,
+    // e.g. any `.refine()`) surfaces exactly that message; multiple
+    // failures join with "; " so nothing is silently dropped either way.
+    // `fieldErrors` is unchanged, for any consumer that maps per-field.
+    const message = Object.values(fieldErrors).join("; ") || "Validation failed";
+
     return NextResponse.json({
-      error: "Validation failed",
+      error: message,
       fieldErrors,
     }, { status: 400 });
   }

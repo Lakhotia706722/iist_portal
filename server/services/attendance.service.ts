@@ -24,9 +24,13 @@ export type AttendanceRecord = {
       id: string;
       student: {
         enrollmentNumber: string;
-        firstName: string;
-        lastName: string;
-        email: string;
+        // Student.firstName/lastName are nullable in the schema; there is
+        // no bare `email` field on Student at all (only User.email, which
+        // this query never selects and nothing here ever read) — this
+        // type previously claimed both incorrectly, hidden by a blind
+        // `as unknown as` cast.
+        firstName: string | null;
+        lastName: string | null;
         batch: {
           academicYear: string;
           branch: {
@@ -156,7 +160,7 @@ export async function markAttendance(
     );
   }
 
-  return attendanceRecord as unknown as AttendanceRecord;
+  return attendanceRecord;
 }
 
 // ─── Bulk Attendance Marking ─────────────────────────────────────────────────
@@ -729,4 +733,79 @@ export async function deleteAttendanceRecord(id: string): Promise<void> {
   }
 
   await prisma.attendanceRecord.delete({ where: { id } });
+}
+
+// ─── Cross-drive rounds overview (Phase 12) ────────────────────────────────
+// Backs the top-level "Attendance" nav page (Admin + Faculty, both hold
+// `attendance:read`) — every existing attendance tool is scoped to one
+// round at a time (markAttendance, getRoundAttendance); this is the "which
+// rounds need attendance marked, across every drive" queue that was
+// missing entirely.
+
+export async function listRoundsWithAttendanceSummary(filters?: {
+  driveId?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{
+  rounds: Array<{
+    id: string;
+    title: string;
+    type: string;
+    scheduledAt: Date | null;
+    isCompleted: boolean;
+    drive: { id: string; title: string; company: { name: string } };
+    participantCount: number;
+    markedCount: number;
+    presentCount: number;
+  }>;
+  total: number;
+}> {
+  const where: any = {};
+  if (filters?.driveId) where.driveId = filters.driveId;
+  if (filters?.search) {
+    where.OR = [
+      { title: { contains: filters.search, mode: "insensitive" } },
+      { drive: { title: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [rounds, total] = await Promise.all([
+    prisma.placementRound.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        type: true,
+        scheduledAt: true,
+        isCompleted: true,
+        drive: { select: { id: true, title: true, company: { select: { name: true } } } },
+        participants: {
+          select: { attendance: { select: { status: true } } },
+        },
+      },
+      orderBy: { scheduledAt: "desc" },
+      skip: filters?.offset || 0,
+      take: filters?.limit || 50,
+    }),
+    prisma.placementRound.count({ where }),
+  ]);
+
+  return {
+    rounds: rounds.map((r) => {
+      const attendances = r.participants.map((p) => p.attendance).filter(Boolean) as { status: string }[];
+      return {
+        id: r.id,
+        title: r.title,
+        type: r.type,
+        scheduledAt: r.scheduledAt,
+        isCompleted: r.isCompleted,
+        drive: r.drive,
+        participantCount: r.participants.length,
+        markedCount: attendances.length,
+        presentCount: attendances.filter((a) => a.status === "PRESENT" || a.status === "LATE").length,
+      };
+    }),
+    total,
+  };
 }

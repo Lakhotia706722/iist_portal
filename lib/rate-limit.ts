@@ -34,12 +34,31 @@ export interface RateLimitOptions {
   windowMs: number;
 }
 
-function clientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    "unknown"
-  );
+function clientIp(request: NextRequest): string | null {
+  const header =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    // Next.js's App Router route handlers have no API for the raw socket
+    // address (unlike Express) — `request.ip` only exists on platforms
+    // (Vercel) that inject it. Without a reverse proxy in front setting
+    // x-forwarded-for/x-real-ip — true for plain `next dev`, and for any
+    // production deploy that skips that step despite the CSP trusted-
+    // proxy assumption documented elsewhere — there is no way to tell
+    // clients apart at all.
+    (request as any).ip;
+  if (header) return header;
+
+  // Fallback: Auth.js sets a CSRF-token cookie on every page load, before
+  // any login attempt — distinct per browser/session, so it separates
+  // real clients from each other the same way an IP would, without
+  // requiring one. Prefer that cookie by name; if it's genuinely absent
+  // too, fall back to any cookie at all rather than giving up immediately.
+  const cookies = request.cookies.getAll();
+  const csrf = cookies.find((c) => c.name.endsWith("csrf-token"));
+  if (csrf) return `cookie:${csrf.value}`;
+  if (cookies.length > 0) return `cookie:${cookies[0].name}:${cookies[0].value}`;
+
+  return null;
 }
 
 export interface RateLimitResult {
@@ -49,7 +68,28 @@ export interface RateLimitResult {
 }
 
 export function checkRateLimit(request: NextRequest, options: RateLimitOptions): RateLimitResult {
-  const key = `${options.bucket}:${clientIp(request)}`;
+  const ip = clientIp(request);
+  if (ip === null) {
+    // Phase 10: this used to key on the literal string "unknown" here,
+    // which meant every client sharing that fallback — every request in
+    // an environment with no reverse proxy in front, e.g. plain
+    // `next dev`, or a misconfigured production deploy — collapsed onto
+    // one shared bucket. 10 login attempts from ANY user, or a handful of
+    // automated test runs, then 429'd EVERY OTHER USER for the rest of
+    // that window: an accidental institute-wide lockout, found when this
+    // engagement's own test suite reliably reproduced it after enough
+    // real logins in one dev-server session. clientIp()'s cookie fallback
+    // (above) now covers that case for any real browser — this branch is
+    // reached only by a request with neither a forwarded-for header nor
+    // any cookie at all (e.g. a bare curl POST with no prior page visit),
+    // which is rare enough that failing open (no limiting) for it is the
+    // safer choice — the alternative is blocking everyone over one
+    // unidentifiable request.
+    console.warn(`[rate-limit] no client identifier available for bucket "${options.bucket}" — skipping (see clientIp() in lib/rate-limit.ts)`);
+    return { allowed: true, remaining: options.limit, resetAt: Date.now() + options.windowMs };
+  }
+
+  const key = `${options.bucket}:${ip}`;
   const now = Date.now();
   const existing = store.get(key);
 

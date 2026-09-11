@@ -37,6 +37,7 @@ function StatCard({ icon: Icon, label, value }: { icon: any; label: string; valu
 }
 
 export function CompanyDashboardClient() {
+  // Live — Phase 15: admin staff run the drives this rep is watching.
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["company-dashboard"],
     queryFn: async () => {
@@ -47,6 +48,8 @@ export function CompanyDashboardClient() {
       }
       return res.json() as Promise<CompanyDashboard>;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading your dashboard…" />;

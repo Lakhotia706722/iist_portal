@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DATABASE_URL: "postgresql://iist_user:iist_pass@localhost:5432/iist_career_db"
+  AUTH_SECRET: "ci-only-secret-key-not-for-production-use-32chars"
+  STORAGE_DRIVER: "local"
+  LOCAL_STORAGE_PATH: "./uploads"
+  NEXT_PUBLIC_APP_URL: "http://localhost:4242"
+  E2E_BASE_URL: "http://localhost:4242"
+
+jobs:
+  # Fast, DB-free checks — typecheck, lint, and the two Phase 12 standing
+  # guards (nav-to-route reconciliation + stub-pattern scan). These run on
+  # every push/PR and finish in well under a minute; nothing here needs a
+  # database, a build, or a browser.
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - name: Nav-to-route reconciliation (Phase 12 Step 3)
+        run: npm run check:nav
+      - name: Stub-pattern scan (Phase 12 Step 3)
+        run: npm run check:stubs
+
+  # Real-browser regression — every non-comingSoon nav item, for every role,
+  # actually rendered and logged into (e2e/route-crawl.spec.ts), plus the
+  # full flow suite. Needs a real Postgres + a built, running app.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: static-checks
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: iist_user
+          POSTGRES_PASSWORD: iist_pass
+          POSTGRES_DB: iist_career_db
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U iist_user -d iist_career_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      - name: Start app (background)
+        run: npx next start -p 4242 &
+      - name: Wait for app to come up
+        run: npx wait-on http://localhost:4242/login --timeout 60000
+      - run: npx tsx e2e/seed-e2e.ts
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14

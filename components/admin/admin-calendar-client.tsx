@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,26 @@ export function AdminCalendarClient() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Phase 10: `batchId` was already wired into the create payload below
+  // and into the API/Zod schema (see lib/validations/calendar.ts) — the
+  // audience-scoping half of CalendarEvent was fully built except for
+  // this dropdown, so every event created through this form was silently
+  // institute-wide regardless of intent, with no UI way to reach the
+  // batch-scoped path at all.
+  const batchesQuery = useQuery({
+    queryKey: ["batches-for-calendar"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/batches");
+      if (!res.ok) return { batches: [] };
+      const body = await res.json();
+      // /api/admin/batches actually responds { items, total, ... } (see
+      // listBatches()), not { batches }; the fallback here matches the
+      // established convention in skillup-client.tsx/policy-client.tsx/
+      // analytics-client.tsx, all of which had to learn this the same way.
+      return { batches: (body.batches ?? body.items ?? []) as { id: string; name: string; academicYear: string }[] };
+    },
+  });
 
   const create = useMutation({
     mutationFn: async () => {
@@ -145,6 +165,21 @@ export function AdminCalendarClient() {
                 />
               </FormField>
             </div>
+
+            <FormField label="Audience scope" htmlFor="ev-batch" hint="Leave blank for an institute-wide event.">
+              <Select
+                id="ev-batch"
+                value={form.batchId}
+                onChange={(e) => setForm({ ...form, batchId: e.target.value })}
+              >
+                <option value="">Institute-wide</option>
+                {(batchesQuery.data?.batches ?? []).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.academicYear})
+                  </option>
+                ))}
+              </Select>
+            </FormField>
 
             <FormField label="Meeting link" htmlFor="ev-link">
               <Input

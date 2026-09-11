@@ -103,9 +103,13 @@ export function DriveApplications({ driveId }: DriveApplicationsProps) {
   const [sortField, setSortField] = useState<SortField>("appliedAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
+  // Live — Phase 15: a student applying, withdrawing, or another admin
+  // acting on this drive all change this list.
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["drive-applications", driveId, status, search],
     queryFn: () => fetchApplications(driveId, status, search),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const applications = useMemo(() => data?.applications ?? [], [data]);

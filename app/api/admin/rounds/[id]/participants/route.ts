@@ -1,6 +1,9 @@
 /**
  * Admin Round Participants API — Phase 3
  *
+ * GET    /api/admin/rounds/[id]/participants?action=eligible - Applications
+ *          eligible to be added to this round (Phase 10 — the missing
+ *          piece that connected shortlisting to attendance marking)
  * POST   /api/admin/rounds/[id]/participants - Add participants to round
  * DELETE /api/admin/rounds/[id]/participants - Remove participant from round
  * PUT    /api/admin/rounds/[id]/participants - Update participant results
@@ -18,6 +21,8 @@ import {
   removeParticipant,
   updateParticipantResult,
   bulkUpdateParticipantResults,
+  listRoundEligibleApplications,
+  getRoundById,
 } from "@/server/services/round.service";
 import { participantResultSchema } from "@/lib/validations/placement";
 import { BadRequestError } from "@/lib/errors";
@@ -25,6 +30,28 @@ import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
   params: { id: string };
+}
+
+export async function GET(request: NextRequest, { params }: RouteParams) {
+  try {
+    await requirePermission("round:participant:write");
+
+    const { searchParams } = new URL(request.url);
+
+    if (searchParams.get("action") === "eligible") {
+      const applications = await listRoundEligibleApplications(params.id);
+      return NextResponse.json({ applications });
+    }
+
+    // Default: this round's current participants — drive-rounds.tsx's own
+    // "Attendance & Results" panel called this with no handler defined at
+    // all until now (always a 405), so it never actually rendered any
+    // participants either.
+    const round = await getRoundById(params.id);
+    return NextResponse.json({ participants: round.participants });
+  } catch (error) {
+    return handleApiError(error);
+  }
 }
 
 const addParticipantsSchema = z.object({

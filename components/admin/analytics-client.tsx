@@ -49,6 +49,8 @@ function StatCard({ icon: Icon, label, value, sub }: { icon: any; label: string;
 }
 
 function CommandCenterTab() {
+  // Live, but lower-value than a student's own tracking views — a 20s
+  // interval is plenty for an aggregate dashboard tile.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["command-center"],
     queryFn: async () => {
@@ -56,6 +58,8 @@ function CommandCenterTab() {
       if (!res.ok) throw new Error("Failed to load metrics");
       return res.json() as Promise<CommandCenter>;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading command center…" />;

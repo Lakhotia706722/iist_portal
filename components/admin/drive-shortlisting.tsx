@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -10,28 +11,30 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { useToast } from "@/hooks/use-toast";
 import {
   UserCheck, Filter, Upload, Search, CheckSquare, Square,
-  ChevronUp, ChevronDown, RefreshCw, Download, X
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Download, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { fetchJson } from "@/lib/api-client";
+import { shortlistApplicantsResponseSchema } from "@/lib/validations/responses";
 
 interface Applicant {
   id: string;
   status: string;
   appliedAt: string;
-  adminNote: string | null;
   student: {
     id: string;
     enrollmentNumber: string;
-    user: { name: string; email: string };
-    branch: { name: string; code: string };
-    batch: { academicYear: string };
+    firstName: string | null;
+    lastName: string | null;
+    batch: { academicYear: string; branch: { name: string; code: string } };
     academicRecord: { currentCgpa: number | null } | null;
   };
   jobRole: { id: string; title: string };
-  resumeVersion: { filename: string; fileUrl: string } | null;
+  resumeVersion: { fileKey: string | null; fileUrl: string | null } | null;
 }
 
 interface Props { driveId: string }
@@ -42,11 +45,11 @@ const STATUS_OPTIONS = [
   { value: "REJECTED",    label: "Rejected" },
 ];
 
+function studentName(student: Applicant["student"]): string {
+  return [student.firstName, student.lastName].filter(Boolean).join(" ") || student.enrollmentNumber;
+}
+
 export function DriveShortlisting({ driveId }: Props) {
-  const [applicants, setApplicants] = useState<Applicant[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -61,30 +64,42 @@ export function DriveShortlisting({ driveId }: Props) {
   const csvRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const fetchApplicants = useCallback(async (quiet = false) => {
-    quiet ? setRefreshing(true) : setLoading(true);
-    try {
-      const p = new URLSearchParams({ limit: "100" });
-      if (statusFilter) p.set("status", statusFilter);
-      if (search) p.set("search", search);
-      const res = await fetch(`/api/admin/drives/${driveId}/shortlist?${p}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setApplicants(data.applications ?? []);
-      setTotal(data.total ?? data.applications?.length ?? 0);
-    } catch {
-      toast({ title: "Error", description: "Failed to load applicants.", variant: "destructive" });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-    // Intentionally excludes `search`: search is applied client-side to the
-    // fetched page (see `displayed` below), so re-fetching per keystroke
-    // would be wasteful — only the status filter triggers a re-fetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driveId, statusFilter, toast]);
+  // Phase 11: this fetched a hardcoded `limit=100` with no offset and no
+  // pagination controls at all — a drive with more than 100 applicants
+  // (a realistic volume for a large company drive) had every applicant
+  // past the 100th completely invisible here, with no way to reach them
+  // to shortlist/reject/search among them. Found via a data-volume check
+  // with 120 real applicants seeded against one drive.
+  const PAGE_SIZE = 100;
+  const [page, setPage] = useState(0);
 
-  useEffect(() => { fetchApplicants(); }, [fetchApplicants]);
+  // Live — Phase 15: another admin/HOD user, or the same one in a second
+  // tab, can shortlist/reject applicants concurrently; a CSV upload run by
+  // someone else should show up here too. Search is intentionally not in
+  // the query key: it's applied client-side to the fetched page (see
+  // `displayed` below), so re-fetching per keystroke would be wasteful —
+  // only the status filter and page trigger a refetch.
+  const { data, isLoading: loading, isFetching: refreshing, isError: error, refetch: fetchApplicants } = useQuery({
+    queryKey: ["drive-shortlist", driveId, statusFilter, page],
+    queryFn: () =>
+      fetchJson(
+        `/api/admin/drives/${driveId}/shortlist?${new URLSearchParams({
+          limit: String(PAGE_SIZE),
+          offset: String(page * PAGE_SIZE),
+          ...(statusFilter ? { status: statusFilter } : {}),
+        })}`,
+        shortlistApplicantsResponseSchema
+      ),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applicants = data?.applications ?? [];
+  const total = data?.pagination.total ?? 0;
+
+  // Changing the status filter (or search) makes the previous page
+  // number potentially meaningless against the new, smaller result set —
+  // reset to the first page whenever either changes.
+  useEffect(() => { setPage(0); }, [statusFilter, search]);
 
   /* ── filtering / sorting (client-side) ── */
   const displayed = applicants
@@ -93,7 +108,7 @@ export function DriveShortlisting({ driveId }: Props) {
       if (search) {
         const q = search.toLowerCase();
         return (
-          a.student.user.name.toLowerCase().includes(q) ||
+          studentName(a.student).toLowerCase().includes(q) ||
           a.student.enrollmentNumber.toLowerCase().includes(q) ||
           a.jobRole.title.toLowerCase().includes(q)
         );
@@ -142,7 +157,7 @@ export function DriveShortlisting({ driveId }: Props) {
       setSelected(new Set());
       setBulkAction("");
       setBulkNote("");
-      await fetchApplicants(true);
+      await fetchApplicants();
     } catch {
       toast({ title: "Error", description: "Bulk action failed.", variant: "destructive" });
     } finally {
@@ -150,24 +165,78 @@ export function DriveShortlisting({ driveId }: Props) {
     }
   };
 
-  /* ── CSV upload ── */
+  /* ── CSV upload ──
+   * Parsed client-side into rows and posted as JSON — same pattern as
+   * SkillUp's results upload (skillup-client.tsx). Previously this sent
+   * the raw file as multipart FormData to an endpoint that only ever
+   * called request.json() on it, so CSV upload never actually worked;
+   * see the comment on csvShortlistSchema for the full history.
+   */
+  const parseCsvRows = (text: string) => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const splitLine = (l: string) => l.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+
+    // Drop a header row if its 2nd column isn't a recognizable action value.
+    const looksLikeAction = (v: string | undefined) =>
+      !!v && /^(shortlist|shortlisted|reject|rejected)$/i.test(v);
+    const firstCols = lines[0] ? splitLine(lines[0]) : [];
+    const dataLines = looksLikeAction(firstCols[1]) ? lines : lines.slice(1);
+
+    const rows: { enrollmentNumber: string; action: "SHORTLISTED" | "REJECTED"; note?: string }[] = [];
+    const skipped: string[] = [];
+    for (const line of dataLines) {
+      const [enrollmentNumber, actionRaw, note] = splitLine(line);
+      if (!enrollmentNumber) continue;
+      if (/^shortlist(ed)?$/i.test(actionRaw ?? "")) {
+        rows.push({ enrollmentNumber, action: "SHORTLISTED", note: note || undefined });
+      } else if (/^reject(ed)?$/i.test(actionRaw ?? "")) {
+        rows.push({ enrollmentNumber, action: "REJECTED", note: note || undefined });
+      } else {
+        skipped.push(enrollmentNumber);
+      }
+    }
+    return { rows, skipped };
+  };
+
   const uploadCsv = async (file: File) => {
     setCsvUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
+      const text = await file.text();
+      const { rows, skipped } = parseCsvRows(text);
+
+      if (rows.length === 0) {
+        toast({
+          title: "Nothing to upload",
+          description: "No rows with a valid action (shortlist/reject) were found in the CSV.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const res = await fetch(`/api/admin/drives/${driveId}/shortlist?action=csv`, {
-        method: "POST", body: form,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
       });
-      if (!res.ok) throw new Error();
       const data = await res.json();
-      toast({ title: "CSV Processed", description: `${data.processed ?? "?"} records updated.` });
+      if (!res.ok) throw new Error(data?.error ?? "CSV upload failed.");
+
+      const skippedNote = skipped.length > 0 ? ` ${skipped.length} row(s) skipped (invalid action).` : "";
+      toast({
+        title: "CSV Processed",
+        description: `${data.shortlisted ?? 0} shortlisted, ${data.rejected ?? 0} rejected, ${data.failed?.length ?? 0} not found.${skippedNote}`,
+      });
       setShowCsvPanel(false);
-      await fetchApplicants(true);
-    } catch {
-      toast({ title: "Error", description: "CSV upload failed.", variant: "destructive" });
+      await fetchApplicants();
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "CSV upload failed.",
+        variant: "destructive",
+      });
     } finally {
       setCsvUploading(false);
+      if (csvRef.current) csvRef.current.value = "";
     }
   };
 
@@ -175,6 +244,8 @@ export function DriveShortlisting({ driveId }: Props) {
   const roles = Array.from(new Map(applicants.map(a => [a.jobRole.id, a.jobRole.title])).entries());
 
   if (loading) return <div className="flex justify-center py-16"><LoadingSpinner /></div>;
+
+  if (error) return <ErrorState onRetry={() => fetchApplicants()} />;
 
   return (
     <div className="space-y-4">
@@ -185,7 +256,7 @@ export function DriveShortlisting({ driveId }: Props) {
           <p className="text-sm text-muted-foreground">{total} applicants total</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchApplicants(true)} disabled={refreshing}>
+          <Button variant="outline" size="sm" onClick={() => fetchApplicants()} disabled={refreshing}>
             <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshing && "animate-spin")} />Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowCsvPanel(v => !v)}>
@@ -256,8 +327,14 @@ export function DriveShortlisting({ driveId }: Props) {
             <Select value={bulkAction} onValueChange={setBulkAction}>
               <SelectTrigger className="w-44 bg-white"><SelectValue placeholder="Choose action…" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="shortlist">Shortlist</SelectItem>
-                <SelectItem value="reject">Reject</SelectItem>
+                {/* Values must match bulkShortlistSchema's action enum
+                    ("SHORTLISTED"/"REJECTED") exactly — this used to send
+                    lowercase "shortlist"/"reject", which the API always
+                    rejected with a 400, silently swallowed by the generic
+                    error toast below. Found via Phase 9's real-browser
+                    verification. */}
+                <SelectItem value="SHORTLISTED">Shortlist</SelectItem>
+                <SelectItem value="REJECTED">Reject</SelectItem>
               </SelectContent>
             </Select>
             <Input className="flex-1 min-w-[180px] bg-white" placeholder="Optional note…"
@@ -314,8 +391,8 @@ export function DriveShortlisting({ driveId }: Props) {
                     </button>
                   </td>
                   <td className="p-3">
-                    <p className="font-medium">{a.student.user.name}</p>
-                    <p className="text-xs text-muted-foreground">{a.student.enrollmentNumber} · {a.student.branch.code} · {a.student.batch.academicYear}</p>
+                    <p className="font-medium">{studentName(a.student)}</p>
+                    <p className="text-xs text-muted-foreground">{a.student.enrollmentNumber} · {a.student.batch.branch.code} · {a.student.batch.academicYear}</p>
                   </td>
                   <td className="p-3 text-muted-foreground">{a.jobRole.title}</td>
                   <td className="p-3 font-mono">{a.student.academicRecord?.currentCgpa?.toFixed(2) ?? "—"}</td>
@@ -326,7 +403,7 @@ export function DriveShortlisting({ driveId }: Props) {
                     <StatusBadge status={a.status} className="text-xs" />
                   </td>
                   <td className="p-3">
-                    {a.resumeVersion ? (
+                    {a.resumeVersion?.fileUrl ? (
                       <a href={a.resumeVersion.fileUrl} target="_blank" rel="noopener noreferrer"
                         className="text-xs text-primary underline underline-offset-2 hover:no-underline">
                         View
@@ -337,6 +414,22 @@ export function DriveShortlisting({ driveId }: Props) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            {total === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" disabled={(page + 1) * PAGE_SIZE >= total} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

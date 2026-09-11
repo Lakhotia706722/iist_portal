@@ -135,6 +135,95 @@ export async function listDepartmentStudents(departmentId: string, filters: Depa
   };
 }
 
+// ─── Department applications / offers (Phase 12) ───────────────────────────
+// Same scoping shape as listDepartmentStudents above — backs the "Applications"
+// and "Offers" nav pages, which previously had no page at all.
+
+export interface DepartmentApplicationFilters {
+  status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listDepartmentApplications(departmentId: string, filters: DepartmentApplicationFilters = {}) {
+  const where: any = { student: { branch: { departmentId } } };
+  if (filters.status) where.status = filters.status;
+  if (filters.search) {
+    where.OR = [
+      { student: { firstName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { lastName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { enrollmentNumber: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [applications, total] = await Promise.all([
+    prisma.application.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        appliedAt: true,
+        student: {
+          select: {
+            id: true, enrollmentNumber: true, firstName: true, lastName: true,
+            batch: { select: { academicYear: true, branch: { select: { code: true, name: true } } } },
+            academicRecord: { select: { currentCgpa: true } },
+          },
+        },
+        jobRole: { select: { id: true, title: true, drive: { select: { id: true, title: true, company: { select: { name: true } } } } } },
+      },
+      orderBy: { appliedAt: "desc" },
+      skip: filters.offset ?? 0,
+      take: filters.limit ?? 50,
+    }),
+    prisma.application.count({ where }),
+  ]);
+
+  return { applications, total };
+}
+
+export interface DepartmentOfferFilters {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listDepartmentOffers(departmentId: string, filters: DepartmentOfferFilters = {}) {
+  const where: any = { student: { branch: { departmentId } } };
+  if (filters.search) {
+    where.OR = [
+      { student: { firstName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { lastName: { contains: filters.search, mode: "insensitive" } } },
+      { student: { enrollmentNumber: { contains: filters.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const [offers, total] = await Promise.all([
+    prisma.offer.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        ctc: true,
+        stipend: true,
+        offerDate: true,
+        student: {
+          select: { id: true, enrollmentNumber: true, firstName: true, lastName: true, batch: { select: { branch: { select: { code: true } } } } },
+        },
+        company: { select: { name: true } },
+        jobRole: { select: { title: true } },
+      },
+      orderBy: { offerDate: "desc" },
+      skip: filters.offset ?? 0,
+      take: filters.limit ?? 50,
+    }),
+    prisma.offer.count({ where }),
+  ]);
+
+  return { offers, total };
+}
+
 // ─── Department compliance ─────────────────────────────────────────────────
 
 export async function getDepartmentCompliance(departmentId: string) {

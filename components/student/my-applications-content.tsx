@@ -1,21 +1,27 @@
 /**
  * My Applications Content Component — Phase 3
  * Handles data fetching and display of student applications
+ *
+ * Phase 15 — converted to TanStack Query (was raw useState/useEffect) so
+ * this participates in refetchInterval polling and the notification
+ * fast-path: a shortlist/round/attendance/offer change made by admin staff
+ * must show up here without the student reloading.
  */
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApplicationCard } from "./application-card";
 import { ApplicationsFilters } from "./applications-filters";
 import { ApplicationsStats } from "./applications-stats";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useToast } from "@/hooks/use-toast";
 import { Search, Filter, RefreshCw, FileText } from "lucide-react";
@@ -85,16 +91,12 @@ export function MyApplicationsContent({
 }: {
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
-  const [data, setData] = useState<ApplicationsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [, setSelectedApplication] = useState<Application | null>(null);
   const router = useRouter();
-  const params = useSearchParams();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
-  // Extract current filters from search params
   const currentFilters = useMemo(
     () => ({
       search: (searchParams.search as string) || "",
@@ -106,11 +108,9 @@ export function MyApplicationsContent({
     [searchParams]
   );
 
-  const fetchApplications = useCallback(async (refresh = false) => {
-    if (refresh) setRefreshing(true);
-    else setLoading(true);
-
-    try {
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+    queryKey: ["student-applications", currentFilters],
+    queryFn: async () => {
       const queryParams = new URLSearchParams();
       if (currentFilters.search) queryParams.set("search", currentFilters.search);
       if (currentFilters.status) queryParams.set("status", currentFilters.status);
@@ -119,88 +119,59 @@ export function MyApplicationsContent({
       queryParams.set("offset", currentFilters.offset.toString());
 
       const response = await fetch(`/api/student/applications?${queryParams.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+      if (!response.ok) throw new Error(await response.text());
+      return (await response.json()) as ApplicationsResponse;
+    },
+    // Live — status changes, shortlisting, round/attendance results, and
+    // offers are all made by admin/faculty staff, not this student.
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
 
-      const result: ApplicationsResponse = await response.json();
-      setData(result);
-
-    } catch (error) {
-      console.error("Failed to fetch applications:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load applications. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [currentFilters, toast]);
-
-  // Update URL with new filters
   const updateFilters = (newFilters: Partial<typeof currentFilters>) => {
     const params = new URLSearchParams();
-    
-    const filters = { ...currentFilters, ...newFilters, offset: 0 }; // Reset offset on filter change
-    
+    const filters = { ...currentFilters, ...newFilters, offset: 0 };
     if (filters.search) params.set("search", filters.search);
     if (filters.status) params.set("status", filters.status);
     if (filters.academicYear) params.set("academicYear", filters.academicYear);
     if (filters.offset > 0) params.set("offset", filters.offset.toString());
-
     const queryString = params.toString();
     router.push(`/student/applications${queryString ? `?${queryString}` : ""}`);
   };
 
-  // Load more applications (pagination)
   const loadMore = () => {
     updateFilters({ offset: currentFilters.offset + currentFilters.limit });
   };
 
-  // Withdraw application
-  const handleWithdrawApplication = async (applicationId: string, reason?: string) => {
-    try {
+  const withdrawMutation = useMutation({
+    mutationFn: async ({ applicationId, reason }: { applicationId: string; reason?: string }) => {
       const response = await fetch(`/api/student/applications/${applicationId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
       });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      toast({
-        title: "Application Withdrawn",
-        description: "Your application has been successfully withdrawn.",
-        variant: "success",
-      });
-
-      // Refresh data
-      fetchApplications(true);
-    } catch (error) {
+      if (!response.ok) throw new Error(await response.text());
+    },
+    onSuccess: () => {
+      toast({ title: "Application Withdrawn", description: "Your application has been successfully withdrawn.", variant: "success" });
+      qc.invalidateQueries({ queryKey: ["student-applications"] });
+    },
+    onError: (error) => {
       console.error("Failed to withdraw application:", error);
-      toast({
-        title: "Error",
-        description: "Failed to withdraw application. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+      toast({ title: "Error", description: "Failed to withdraw application. Please try again.", variant: "destructive" });
+    },
+  });
 
-  useEffect(() => {
-    fetchApplications();
-  }, [fetchApplications]);
-
-  if (loading && !data) {
+  if (isLoading && !data) {
     return (
       <div className="flex items-center justify-center py-12">
         <LoadingSpinner size="lg" />
       </div>
     );
+  }
+
+  if (isError && !data) {
+    return <ErrorState onRetry={() => refetch()} />;
   }
 
   const applications = data?.applications || [];
@@ -246,14 +217,14 @@ export function MyApplicationsContent({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => fetchApplications(true)}
-              disabled={refreshing}
+              onClick={() => refetch()}
+              disabled={isFetching}
               className="shrink-0"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            
+
             {applications.length > 0 && (
               <div className="text-sm text-muted-foreground">
                 {pagination?.total} applications
@@ -305,9 +276,9 @@ export function MyApplicationsContent({
             <ApplicationCard
               key={application.id}
               application={application}
-              onWithdraw={handleWithdrawApplication}
+              onWithdraw={(applicationId, reason) => withdrawMutation.mutate({ applicationId, reason })}
               onViewDetails={(app) => setSelectedApplication(app)}
-              refreshing={refreshing}
+              refreshing={isFetching}
             />
           ))}
         </div>
@@ -319,9 +290,9 @@ export function MyApplicationsContent({
           <Button
             variant="outline"
             onClick={loadMore}
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? (
+            {isLoading ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
                 Loading...

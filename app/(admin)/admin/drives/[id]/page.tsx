@@ -16,7 +16,6 @@ import {
   MapPin, 
   Users, 
   Clock,
-  Settings,
   FileText,
   Target,
   BarChart3,
@@ -36,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { ErrorState } from "@/components/shared/error-state";
 import { DriveForm } from "@/components/admin/drive-form";
 import { DriveOverview } from "@/components/admin/drive-overview";
 import { DriveJobRoles } from "@/components/admin/drive-job-roles";
@@ -99,6 +99,16 @@ interface DriveDetailPageProps {
 export default function DriveDetailPage({ params }: DriveDetailPageProps) {
   const [drive, setDrive] = useState<DriveDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  // Phase 11: `drive` staying null was treated as "genuinely doesn't
+  // exist" regardless of *why* the fetch didn't return one — a real
+  // fetch failure (500, network error) showed the exact same "Drive Not
+  // Found" message as an actual 404, misleading an admin into thinking
+  // the drive was deleted when the server just hiccupped. Found via a
+  // real-browser error-state audit that forced this endpoint to fail.
+  // notFound (404, real) and fetchError (anything else) now render
+  // distinctly.
+  const [notFound, setNotFound] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -108,13 +118,20 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
   const fetchDriveDetail = useCallback(async () => {
     try {
       setLoading(true);
+      setNotFound(false);
+      setFetchError(false);
       const response = await fetch(`/api/admin/drives/${params.id}`);
+      if (response.status === 404) {
+        setNotFound(true);
+        return;
+      }
       if (!response.ok) throw new Error("Failed to fetch drive details");
 
       const data = await response.json();
       setDrive(data.drive);
     } catch (error) {
       console.error("Error fetching drive details:", error);
+      setFetchError(true);
       toast({
         title: "Error",
         description: "Failed to load drive details",
@@ -166,7 +183,11 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
     );
   }
 
-  if (!drive) {
+  if (fetchError) {
+    return <ErrorState onRetry={fetchDriveDetail} />;
+  }
+
+  if (notFound || !drive) {
     return (
       <div className="space-y-6">
         <div className="text-center">
@@ -281,7 +302,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
       {/* Tabbed Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="gap-1">
             <FileText className="h-4 w-4" />
             Overview
@@ -313,10 +334,6 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
           <TabsTrigger value="dashboard" className="gap-1">
             <BarChart3 className="h-4 w-4" />
             Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="settings" className="gap-1">
-            <Settings className="h-4 w-4" />
-            Settings
           </TabsTrigger>
         </TabsList>
 
@@ -351,22 +368,6 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
           <TabsContent value="dashboard">
             <DriveDashboard driveId={drive.id} />
-          </TabsContent>
-
-          <TabsContent value="settings">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Drive Settings</CardTitle>
-                  <CardDescription>
-                    Configure drive settings and preferences.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">Drive settings panel coming soon...</p>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </div>
       </Tabs>

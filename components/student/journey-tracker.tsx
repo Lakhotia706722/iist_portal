@@ -115,8 +115,11 @@ export function buildJourneySteps(application: {
     type: "application",
   });
 
-  // 2 — Status history events (skip the initial PENDING entry)
-  for (const h of application.statusHistory) {
+  // 2 — Status history events (skip the initial PENDING entry). Defensive
+  // `?? []`: the API always sends this array now, but a component this
+  // deep in the render tree should never crash the whole page on a
+  // malformed response.
+  for (const h of application.statusHistory ?? []) {
     if (h.toStatus === "PENDING") continue;
     steps.push({
       id: h.id,
@@ -133,8 +136,10 @@ export function buildJourneySteps(application: {
     const p = round.participant;
     let rStatus: JourneyStep["status"] = "upcoming";
     if (p) {
-      if (p.result === "PASSED") rStatus = "passed";
-      else if (p.result === "FAILED") rStatus = "failed";
+      // Stored values are "PASS"/"FAIL"/"HOLD" (see RoundParticipant.result
+      // in prisma/schema.prisma) — not "PASSED"/"FAILED".
+      if (p.result === "PASS") rStatus = "passed";
+      else if (p.result === "FAIL") rStatus = "failed";
       else if (p.status === "PRESENT" || p.status === "ABSENT") rStatus = "current";
       else rStatus = "pending";
     }

@@ -15,12 +15,20 @@ interface EmptyStateProps {
 
 function renderIcon(icon: EmptyStateProps["icon"]): React.ReactNode {
   if (!icon) return <InboxIcon className="h-7 w-7 text-muted-foreground" />;
-  // A Lucide icon is a function component — render it at the right size.
-  if (typeof icon === "function") {
-    const Icon = icon as LucideIcon;
-    return <Icon className="h-7 w-7 text-muted-foreground" />;
-  }
-  return icon as React.ReactNode;
+  // Already a rendered element (e.g. `<Award className="h-7 w-7" />`) —
+  // render as-is.
+  if (React.isValidElement(icon)) return icon;
+  // Otherwise it's an unrendered component type and needs to be invoked.
+  // `typeof icon === "function"` alone used to be the check here, but
+  // lucide-react's icons are `React.forwardRef(...)`-wrapped, which is an
+  // *object* (`{$$typeof, render}`), not a function — so that check always
+  // failed for them and fell through to rendering the raw component
+  // reference as a child, crashing with "Objects are not valid as a React
+  // child" the moment any EmptyState with a bare icon prop (the majority
+  // of the 135 call sites in this app) actually rendered with no data.
+  // Found via Phase 9's real-browser verification, not tsc/build/API tests.
+  const Icon = icon as LucideIcon;
+  return <Icon className="h-7 w-7 text-muted-foreground" />;
 }
 
 function renderAction(action: EmptyStateProps["action"]): React.ReactNode {

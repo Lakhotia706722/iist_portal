@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalNumber } from "./common";
 
 export const enrollmentNumberSchema = z
   .string()
@@ -56,10 +57,19 @@ export const personalInfoSchema = z.object({
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit number")
     .optional()
     .or(z.literal("")),
-  annualFamilyIncome: z.coerce.number().min(0).optional(),
+  annualFamilyIncome: optionalNumber(z.coerce.number().min(0)),
+  // Phase 10: was `.optional()` alone, which allows `undefined` but not an
+  // empty string — the actual default value of an untouched <select> (see
+  // personal-info-form.tsx's `defaultValues?.bloodGroup ?? ""`). Blood
+  // Group has no required marker in the UI and every other truly-optional
+  // field in this schema (aadharNumber, personalEmail, fatherPhone, ...)
+  // already follows this `.optional().or(z.literal(""))` idiom for exactly
+  // this reason — this one was just missed, and silently blocked step 1 of
+  // onboarding for any student who left it unselected.
   bloodGroup: z
     .enum(["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"])
-    .optional(),
+    .optional()
+    .or(z.literal("")),
   passportNumber: z.string().max(20).optional(),
 });
 
@@ -87,8 +97,8 @@ export const academicInfoSchema = z.object({
   twelfthStream: z.string().max(50).optional(),
   diplomaInstitute: z.string().max(200).optional(),
   diplomaBranch: z.string().max(100).optional(),
-  diplomaYear: z.coerce.number().int().min(1990).max(new Date().getFullYear()).optional(),
-  diplomaPercentage: z.coerce.number().min(0).max(100).optional(),
+  diplomaYear: optionalNumber(z.coerce.number().int().min(1990).max(new Date().getFullYear())),
+  diplomaPercentage: optionalNumber(z.coerce.number().min(0).max(100)),
   currentCgpa: z.coerce
     .number()
     .min(0, "Must be 0–10")
@@ -96,8 +106,8 @@ export const academicInfoSchema = z.object({
   currentSemester: z.coerce.number().int().min(1).max(12),
   totalBacklogs: z.coerce.number().int().min(0).default(0),
   activeBacklogs: z.coerce.number().int().min(0).default(0),
-  jeeMainRank: z.coerce.number().int().min(1).optional(),
-  jeeAdvancedRank: z.coerce.number().int().min(1).optional(),
+  jeeMainRank: optionalNumber(z.coerce.number().int().min(1)),
+  jeeAdvancedRank: optionalNumber(z.coerce.number().int().min(1)),
   sgpaRecords: z.array(sgpaRecordSchema).min(1, "Add at least one semester SGPA"),
 });
 

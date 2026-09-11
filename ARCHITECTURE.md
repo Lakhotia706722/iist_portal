@@ -422,6 +422,57 @@ work of this phase:
 
 ---
 
+## 16. Runtime-validated API responses (Phase 10)
+
+**Decision:** at the call sites most likely to drift silently — a client
+component reading a service-layer shape it doesn't control — parse the JSON
+response through a Zod schema before the component touches it, instead of
+trusting a TS type alone.
+
+TS types on the client (`interface Applicant { ... }`, a hand-written
+`Round` shape, etc.) describe what a fetch *should* return, but nothing
+checks that at runtime. Phase 9's audit found several call sites where the
+client's assumed shape and the API's actual shape had quietly diverged
+(`student.user.name` that was never `student.user.name`, `data.total` that
+lived under `data.pagination.total`, an `adminNote` field that no response
+ever sent) — each one a silent `undefined` deep in a render, not a build
+error, not a thrown exception, just a subtly wrong UI. "Zod schemas shared
+between client and server" had only ever been true for request/mutation
+payloads, never for what the server sends back.
+
+**Where this lives:**
+- `lib/api-client.ts` — `fetchJson<T>(url, schema, init?)`, a `fetch` wrapper
+  that parses the response with the given Zod schema and throws a
+  descriptive `ApiResponseShapeError` (full field-level diff via
+  `console.error`) on mismatch, instead of returning malformed data.
+- `lib/validations/responses.ts` — the companion response schemas. These are
+  **deliberately not full mirrors** of the service-layer TS return types —
+  only the fields the consuming component actually reads. A schema stricter
+  than what the UI needs just creates false-positive breakage the next time
+  the backend adds an unrelated field.
+
+**Two usage patterns:**
+1. **Full replacement** — for components with only a thin local type,
+   `fetchJson()` replaces the raw `fetch(...).then(r => r.json())` call
+   outright (see `drive-shortlisting.tsx`'s `fetchApplicants`,
+   `application-flow.tsx`'s `fetchResumes`, `drive-rounds.tsx`'s
+   `fetchParticipants`).
+2. **Validation gate** — for components with a richer local TS interface
+   than a lean Zod schema could reasonably cover, call `schema.parse(raw)`
+   purely to throw on mismatch, then still assign `raw` to the existing
+   richer type (see `opportunity-detail-content.tsx`'s
+   `fetchOpportunityDetails`, `drive-rounds.tsx`'s `fetchRounds`).
+
+**Scope — this is not a full retrofit.** It's applied at the exact call
+sites Phase 9 found broken (resumes list, shortlist payload, round
+create/list, opportunity detail) plus the new round-participant endpoints
+Phase 10 added. Adding it to a new call site is warranted when: the
+component's local type is more than a couple of fields, the endpoint is
+service-layer (not a thin passthrough), or the shape has already drifted
+once. It is not warranted for every `fetch` in the app — most call sites
+are simple enough that a mismatch fails loudly on its own (a missing button
+label, an obviously-wrong list) and don't need the extra schema to catch it.
+
 ## Testing
 
 - `npm test` — Vitest (jsdom). Component and unit tests live beside their source.
