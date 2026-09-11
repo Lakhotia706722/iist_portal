@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, ACCOUNTS } from "../helpers";
+import { login, ACCOUNTS, studentDisplayName } from "../helpers";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -19,6 +19,10 @@ test("Global search finds a real student and navigates to them", async ({ page }
   test.setTimeout(60_000);
 
   const studentA = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
+  // Real display name, queried fresh — the shared Student A fixture's
+  // name legitimately drifts from "E2E Student A" as real profile-edit
+  // testing (manual or automated, any phase) renames it.
+  const studentName = await studentDisplayName(prisma, ACCOUNTS.studentA.id);
 
   await login(page, ACCOUNTS.admin.id);
   await page.goto("/dashboard");
@@ -27,7 +31,8 @@ test("Global search finds a real student and navigates to them", async ({ page }
   // title happens to include this student's name — scope to the one
   // result whose title is exactly the student's name (no " — <role>"
   // suffix), i.e. the real "student" type result.
-  const studentResult = page.getByRole("link", { name: new RegExp(`^E2E Student A ${ACCOUNTS.studentA.id} ·`) });
+  const escapedName = studentName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const studentResult = page.getByRole("link", { name: new RegExp(`^${escapedName} ${ACCOUNTS.studentA.id} ·`) });
   await expect(studentResult).toBeVisible({ timeout: 10_000 });
   await studentResult.click();
   await page.waitForURL((url) => url.pathname.includes(studentA.id), { timeout: 15_000 });

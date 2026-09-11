@@ -1,4 +1,5 @@
 import { type Page, expect } from "@playwright/test";
+import type { PrismaClient } from "@prisma/client";
 
 export const PASSWORD = "Password@123";
 
@@ -30,6 +31,19 @@ export function trackConsoleErrors(page: Page): string[] {
   });
   page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
   return errors;
+}
+
+/**
+ * A shared e2e fixture student's real display name — queried fresh from
+ * the DB rather than hardcoded. Shared fixtures (e.g. Student A) get their
+ * firstName/lastName legitimately changed by real profile-edit testing
+ * (manual or automated, across any phase), so a hardcoded literal like
+ * "E2E Student A" silently breaks once that name drifts. Always call this
+ * instead of hardcoding a fixture's name in a UI assertion.
+ */
+export async function studentDisplayName(prisma: PrismaClient, enrollmentNumber: string): Promise<string> {
+  const s = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber } });
+  return [s.firstName, s.lastName].filter(Boolean).join(" ") || s.enrollmentNumber;
 }
 
 export async function expectNoConsoleErrors(errors: string[], context: string) {

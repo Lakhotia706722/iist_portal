@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
-import { login, ACCOUNTS } from "../helpers";
+import { login, ACCOUNTS, studentDisplayName } from "../helpers";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -23,11 +23,11 @@ async function newSession(browser: Browser, loginId: string): Promise<{ page: Pa
 
 // Student A is a shared e2e fixture — its firstName/lastName can genuinely
 // change (someone exploring the real Personal & Academic edit page this
-// phase built, for instance), so every test below looks this up fresh
-// instead of hardcoding "E2E Student A" as a literal string.
+// phase built, for instance), so every test below looks this up fresh via
+// the shared studentDisplayName() helper instead of hardcoding
+// "E2E Student A" as a literal string.
 async function studentADisplayName(): Promise<string> {
-  const s = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
-  return [s.firstName, s.lastName].filter(Boolean).join(" ") || s.enrollmentNumber;
+  return studentDisplayName(prisma, ACCOUNTS.studentA.id);
 }
 
 const RUN = Date.now();
@@ -35,13 +35,13 @@ const RUN = Date.now();
 test("1 — Admin publishes a drive; Student's already-open Opportunities page shows it without reload", async ({ browser }) => {
   test.setTimeout(90_000);
   const DRIVE_TITLE = `RT Drive ${RUN}`;
-  const COMPANY_NAME = `RT Drive Co ${RUN}`;
-
-  // A fresh, uniquely-named company rather than "whichever company happens
-  // to be first" in the create-drive picker — this suite's own earlier
-  // tests (and every other spec's accumulated fixtures) mean that combobox
-  // can hold dozens of real companies by now, and relying on position
-  // there is both slow and non-deterministic.
+  // "AAA "-prefixed so it sorts to the very top of the company picker —
+  // this dev database has accumulated dozens of companies across every
+  // phase/spec's own fixtures by now, and the picker's dropdown is a
+  // fixed-height scrollable Radix Select (not a searchable combobox), so
+  // an alphabetically-late name can end up scrolled out of view in a way
+  // Playwright's auto-scroll doesn't reliably reach.
+  const COMPANY_NAME = `AAA RT Drive Co ${RUN}`;
   await prisma.company.deleteMany({ where: { name: COMPANY_NAME } });
   await prisma.company.create({ data: { name: COMPANY_NAME, slug: `rt-drive-co-${RUN}`, industry: "TECHNOLOGY", isActive: true } });
 
@@ -267,6 +267,13 @@ test("4b — Admin records an offer; Student's already-open Placement History sh
 
   const studentRow = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
   const admin0 = await prisma.user.findUniqueOrThrow({ where: { email: ACCOUNTS.admin.email } });
+  // The offer policy caps this student at 1 active offer — a dangling
+  // offer left by any earlier interrupted test run (this file's own prior
+  // attempts, or another spec's) would otherwise block a fresh Record
+  // Offer submission with a real, correct policy-limit validation error,
+  // not an app bug. Fixture data, so clearing every existing offer for
+  // this student first is safe.
+  await prisma.offer.deleteMany({ where: { studentId: studentRow.id } });
   await prisma.company.deleteMany({ where: { name: COMPANY_NAME } });
   const company = await prisma.company.create({
     data: { name: COMPANY_NAME, slug: `rt-offer-co-${RUN}`, industry: "TECHNOLOGY", isActive: true },

@@ -7,6 +7,13 @@ const prisma = new PrismaClient();
 test.afterAll(() => prisma.$disconnect());
 
 test("Opportunity -> Apply flow: browse, see real eligibility, apply, confirm in My Applications, confirm in DB", async ({ page }) => {
+  // This flow crosses several dev-mode-cold-compile routes (opportunities
+  // list, drive detail, the 3-step apply modal, my-applications) in one
+  // test — the default 30s budget has been observed to run out mid-flow
+  // on a cold dev server, same class of slowness documented on the other
+  // multi-page flows in this suite.
+  test.setTimeout(60_000);
+
   // Idempotency: delete any application from a previous run of this test so
   // re-running the suite doesn't hit "already applied" from stale state.
   const studentForCleanup = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });

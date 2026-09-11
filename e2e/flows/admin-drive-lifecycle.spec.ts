@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login, ACCOUNTS } from "../helpers";
+import { login, ACCOUNTS, studentDisplayName } from "../helpers";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -29,6 +29,11 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
     }
     await prisma.company.delete({ where: { id: c.id } });
   }
+
+  // Real display name, queried fresh — the shared Student A fixture's
+  // name legitimately drifts from "E2E Student A" as real profile-edit
+  // testing (manual or automated, any phase) renames it.
+  const studentName = await studentDisplayName(prisma, ACCOUNTS.studentA.id);
 
   await login(page, ACCOUNTS.admin.id);
 
@@ -102,8 +107,8 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   // a raw bulk-API call.
   await page.goto(`/admin/drives/${driveId}`);
   await page.getByRole("tab", { name: /shortlisting/i }).click();
-  await expect(page.getByText("E2E Student A")).toBeVisible({ timeout: 15_000 });
-  await page.locator("tr", { hasText: "E2E Student A" }).getByRole("button").first().click();
+  await expect(page.getByText(studentName)).toBeVisible({ timeout: 15_000 });
+  await page.locator("tr", { hasText: studentName }).getByRole("button").first().click();
   await page.getByRole("combobox").filter({ hasText: /choose action/i }).click();
   await page.getByRole("option", { name: /^shortlist$/i }).click();
   await page.getByRole("button", { name: /^apply$/i }).click();
@@ -111,7 +116,7 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   // applications — once shortlisted, the row correctly disappears from
   // this queue entirely (that's the real, DB-verified signal, not a
   // "Shortlisted" label appearing in this specific view).
-  await expect(page.getByText("E2E Student A")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText(studentName)).toHaveCount(0, { timeout: 15_000 });
 
   const shortlisted = await prisma.application.findUniqueOrThrow({ where: { id: application.id } });
   expect(shortlisted.status).toBe("SHORTLISTED");
@@ -132,8 +137,8 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   // that gap for real, no DB bypass.
   await page.getByText("E2E Technical Round").click(); // expand the round card
   await page.getByRole("button", { name: /add participants/i }).click();
-  await expect(page.getByRole("dialog").getByText("E2E Student A")).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("dialog").getByText("E2E Student A").click();
+  await expect(page.getByRole("dialog").getByText(studentName)).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("dialog").getByText(studentName).click();
   await page.getByRole("dialog").getByRole("button", { name: /^add \d+ participants?$/i }).click();
   await expect(page.getByText(/participant\(s\) added/i)).toBeVisible({ timeout: 15_000 });
 
@@ -145,8 +150,8 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   // 8 — Mark attendance through the real UI — this is the exact tab that
   // was a stub before Phase 3.5; confirming it still isn't one.
   await page.getByRole("tab", { name: /attendance/i }).click();
-  await expect(page.getByText("E2E Student A")).toBeVisible({ timeout: 15_000 });
-  const attendanceRow = page.locator("tr", { hasText: "E2E Student A" });
+  await expect(page.getByText(studentName)).toBeVisible({ timeout: 15_000 });
+  const attendanceRow = page.locator("tr", { hasText: studentName });
   // Buttons are abbreviated (s.charAt(0) + s.slice(1,3).toLowerCase()) —
   // "PRESENT" renders as "Pre", not "Present".
   await attendanceRow.getByRole("button", { name: /^pre$/i }).click();
@@ -178,7 +183,7 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   // matching native <select> too; scope explicitly by label to avoid the
   // page-level "Filter by status" select behind the dialog).
   // Option label is built as `${name} — ${company} · ${role}` exactly.
-  await page.getByLabel(/selected application/i).selectOption({ label: `E2E Student A — ${COMPANY_NAME} · ${ROLE_TITLE}` });
+  await page.getByLabel(/selected application/i).selectOption({ label: `${studentName} — ${COMPANY_NAME} · ${ROLE_TITLE}` });
   await page.getByLabel("CTC (LPA)").fill("12");
   await page.getByRole("dialog").getByRole("button", { name: /^(record offer|save|submit)$/i }).last().click();
   await expect(page.getByText(/offer recorded/i)).toBeVisible({ timeout: 15_000 });
