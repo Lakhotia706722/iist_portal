@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,37 +30,31 @@ const STATUS_OPTIONS = [
  * those actions a second time.
  */
 export function AllApplicationsClient({ driveLinkBase }: { driveLinkBase?: string } = {}) {
-  const [applicants, setApplicants] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const fetchApplications = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: any admin/faculty viewer, and every student applying
+  // to anything, changes this cross-drive list.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["all-applications", search, statusFilter, page],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
       if (search) p.set("search", search);
       if (statusFilter) p.set("status", statusFilter);
-      const data = await fetchJson(`/api/admin/applications?${p}`, allApplicationsResponseSchema);
-      setApplicants(data.applications);
-      setTotal(data.pagination.total);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, statusFilter, page]);
+      return fetchJson(`/api/admin/applications?${p}`, allApplicationsResponseSchema);
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applicants = data?.applications ?? [];
+  const total = data?.pagination.total ?? 0;
 
-  useEffect(() => { fetchApplications(); }, [fetchApplications]);
   useEffect(() => { setPage(0); }, [search, statusFilter]);
 
-  if (loading) return <LoadingState text="Loading applications…" />;
-  if (error) return <ErrorState onRetry={fetchApplications} />;
+  if (isLoading) return <LoadingState text="Loading applications…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">

@@ -35,6 +35,8 @@ function StatCard({ icon: Icon, label, value, sub }: { icon: any; label: string;
 }
 
 export function HodDashboardClient() {
+  // Live — Phase 15: admin recording an offer/placement in this
+  // department changes these counts.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["hod-dashboard"],
     queryFn: async () => {
@@ -42,6 +44,8 @@ export function HodDashboardClient() {
       if (!res.ok) throw new Error("Failed to load dashboard");
       return res.json() as Promise<HodDashboard>;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading department dashboard…" />;

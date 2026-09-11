@@ -146,9 +146,13 @@ export function OffersClient() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Live — Phase 15: another admin, or a company rep accepting/declining
+  // via their own portal, can change offer status concurrently.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-offers", status, category],
     queryFn: () => fetchOffers({ status, category }),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const { data: offerable } = useQuery({

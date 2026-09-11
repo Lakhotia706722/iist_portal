@@ -48,6 +48,9 @@ export function AuditLogClient() {
   const [detail, setDetail] = useState<AuditLog | null>(null);
   const pageSize = 30;
 
+  // Live, but only while looking at the first (most-recent) page — polling
+  // while paged into history would shift rows out from under the admin
+  // mid-browse. Lower-value than a tracking view, so a longer interval.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["audit-logs", search, action, entity, page],
     queryFn: async () => {
@@ -59,6 +62,8 @@ export function AuditLogClient() {
       if (!res.ok) throw new Error("Failed to load audit logs");
       return res.json() as Promise<{ logs: AuditLog[]; total: number; entities: string[]; actions: string[] }>;
     },
+    refetchInterval: page === 0 ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading audit logs…" />;

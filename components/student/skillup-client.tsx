@@ -48,6 +48,7 @@ function barColor(pct: number) {
 }
 
 export function SkillUpClient() {
+  // Live — Phase 15: faculty publish results, not this student.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["student-skillup"],
     queryFn: async () => {
@@ -55,6 +56,8 @@ export function SkillUpClient() {
       if (!res.ok) throw new Error("Failed to load your SkillUp performance");
       return res.json() as Promise<Performance>;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading your performance…" />;

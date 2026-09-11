@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,30 +21,24 @@ import { Search, ListChecks } from "lucide-react";
  * tab (already built + tested), reached here via "Review".
  */
 export function ShortlistingQueueClient() {
-  const [applications, setApplications] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchQueue = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: a new student application, or another admin
+  // shortlisting/rejecting one, changes this queue.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["shortlisting-queue", search],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: "100" });
       if (search) p.set("search", search);
-      const data = await fetchJson(`/api/admin/shortlisting?${p}`, allApplicationsResponseSchema);
-      setApplications(data.applications);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+      return fetchJson(`/api/admin/shortlisting?${p}`, allApplicationsResponseSchema);
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const applications = data?.applications ?? [];
 
-  useEffect(() => { fetchQueue(); }, [fetchQueue]);
-
-  if (loading) return <LoadingState text="Loading queue…" />;
-  if (error) return <ErrorState onRetry={fetchQueue} />;
+  if (isLoading) return <LoadingState text="Loading queue…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">

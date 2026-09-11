@@ -35,9 +35,13 @@ async function fetchOffers() {
 }
 
 export function PlacementHistoryClient() {
+  // Live — Phase 15: offers are created/updated by admin/company-rep
+  // staff, not this student.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["student-offers"],
     queryFn: fetchOffers,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading placement history…" />;

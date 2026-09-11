@@ -46,6 +46,11 @@ export function StudentsDirectoryClient() {
     },
   });
 
+  // Live — Phase 15: this is the closest real surface to an "admin
+  // student-detail view" in the current app (no dedicated per-student
+  // detail page exists yet — see the phase report) — a student completing
+  // onboarding or their application/placement counts changing should
+  // still show up here without a reload.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-students-directory", search, branchId, page],
     queryFn: async () => {
@@ -56,6 +61,8 @@ export function StudentsDirectoryClient() {
       if (!res.ok) throw new Error("Failed to load students");
       return res.json() as Promise<{ students: AdminStudent[]; pagination: { total: number; hasMore: boolean } }>;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   return (

@@ -99,7 +99,7 @@ export function DriveShortlisting({ driveId }: Props) {
   // Changing the status filter (or search) makes the previous page
   // number potentially meaningless against the new, smaller result set —
   // reset to the first page whenever either changes.
-  useState(() => {}); // no-op placeholder removed below; see effect
+  useEffect(() => { setPage(0); }, [statusFilter, search]);
 
   /* ── filtering / sorting (client-side) ── */
   const displayed = applicants
@@ -157,7 +157,7 @@ export function DriveShortlisting({ driveId }: Props) {
       setSelected(new Set());
       setBulkAction("");
       setBulkNote("");
-      await fetchApplicants(true);
+      await fetchApplicants();
     } catch {
       toast({ title: "Error", description: "Bulk action failed.", variant: "destructive" });
     } finally {
@@ -227,7 +227,7 @@ export function DriveShortlisting({ driveId }: Props) {
         description: `${data.shortlisted ?? 0} shortlisted, ${data.rejected ?? 0} rejected, ${data.failed?.length ?? 0} not found.${skippedNote}`,
       });
       setShowCsvPanel(false);
-      await fetchApplicants(true);
+      await fetchApplicants();
     } catch (err) {
       toast({
         title: "Error",
@@ -256,7 +256,7 @@ export function DriveShortlisting({ driveId }: Props) {
           <p className="text-sm text-muted-foreground">{total} applicants total</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => fetchApplicants(true)} disabled={refreshing}>
+          <Button variant="outline" size="sm" onClick={() => fetchApplicants()} disabled={refreshing}>
             <RefreshCw className={cn("h-4 w-4 mr-1.5", refreshing && "animate-spin")} />Refresh
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowCsvPanel(v => !v)}>

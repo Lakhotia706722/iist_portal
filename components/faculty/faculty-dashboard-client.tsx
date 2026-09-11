@@ -17,6 +17,8 @@ interface FacultyDashboard {
 }
 
 export function FacultyDashboardClient() {
+  // Live — Phase 15: another faculty/admin's test/interview activity for
+  // shared students changes this.
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["faculty-dashboard"],
     queryFn: async () => {
@@ -24,6 +26,8 @@ export function FacultyDashboardClient() {
       if (!res.ok) throw new Error("Failed to load dashboard");
       return res.json() as Promise<FacultyDashboard>;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) return <LoadingState text="Loading dashboard…" />;

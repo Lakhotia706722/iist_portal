@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,30 +23,23 @@ import { formatDateTime } from "@/lib/utils";
  * (admin-only, since only TP_ADMIN/HOD hold `attendance:write`).
  */
 export function AttendanceOverviewClient({ driveLinkBase }: { driveLinkBase?: string } = {}) {
-  const [rounds, setRounds] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
 
-  const fetchRounds = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
+  // Live — Phase 15: attendance marked by an admin/HOD on any round.
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["attendance-overview", search],
+    queryFn: () => {
       const p = new URLSearchParams({ limit: "100" });
       if (search) p.set("search", search);
-      const data = await fetchJson(`/api/admin/attendance?${p}`, attendanceOverviewResponseSchema);
-      setRounds(data.rounds);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
+      return fetchJson(`/api/admin/attendance?${p}`, attendanceOverviewResponseSchema);
+    },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  });
+  const rounds = data?.rounds ?? [];
 
-  useEffect(() => { fetchRounds(); }, [fetchRounds]);
-
-  if (loading) return <LoadingState text="Loading rounds…" />;
-  if (error) return <ErrorState onRetry={fetchRounds} />;
+  if (isLoading) return <LoadingState text="Loading rounds…" />;
+  if (isError) return <ErrorState onRetry={() => refetch()} />;
 
   return (
     <div className="space-y-4">
