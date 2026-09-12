@@ -10,8 +10,9 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { sendEmail, interpolateTemplate } from "@/lib/email";
+import { sendEmail, interpolateTemplate, type EmailOptions } from "@/lib/email";
 import { getBuiltInTemplate } from "@/lib/email/templates";
+import { isQueueConfigured, enqueueJob, enqueueJobs } from "@/lib/queue/qstash";
 import type { NotificationPriority as PrismaPriority } from "@prisma/client";
 
 export type NotificationChannel = "email" | "sms" | "push" | "in_app";
@@ -170,13 +171,29 @@ export async function notify(payload: NotificationPayload): Promise<void> {
     }
 
     if (payload.channels.includes("email")) {
-      // Sent individually so one bad address can't sink the batch.
-      await Promise.allSettled(
-        recipients.map(async (r) => {
-          const { subject, html, text } = await renderEmail(payload, r);
-          await sendEmail({ to: r.email, subject, html, text });
-        })
+      // Phase 16 — P4: rendering is cheap and stays inline (it's just
+      // template interpolation); the actual send — a real SMTP round trip
+      // per recipient — is what must not block this request, whether
+      // there's one recipient or several hundred (see lib/queue/qstash.ts
+      // for why single and bulk share one mechanism here).
+      const rendered = await Promise.all(
+        recipients.map(async (r) => ({ to: r.email, ...(await renderEmail(payload, r)) }))
       );
+
+      if (isQueueConfigured()) {
+        if (rendered.length === 1) {
+          await enqueueJob("/api/jobs/send-email", rendered[0]);
+        } else {
+          await enqueueJobs("/api/jobs/send-email", rendered);
+        }
+      } else {
+        // No QSTASH_TOKEN (local dev, or before it's provisioned) — send
+        // inline, same as before Phase 16. Correct for local dev; does not
+        // decouple anything, so production needs the real token set.
+        await Promise.allSettled(
+          rendered.map(({ to, subject, html, text }) => sendEmail({ to, subject, html, text }))
+        );
+      }
     }
 
     // sms / push have no provider configured yet.

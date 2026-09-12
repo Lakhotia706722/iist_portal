@@ -47,6 +47,31 @@ export async function getUnreadCount(userId: string) {
   return prisma.notification.count({ where: { userId, readAt: null } });
 }
 
+/**
+ * Phase 16 — P3.1: the notification bell polls every 8s (the tightest
+ * interval in the app, since it's also the fast-path trigger) — at 1000+
+ * concurrent users that's the single highest-volume "live" query, and the
+ * full listNotifications() call re-serializes up to 15 full rows every
+ * cycle even when nothing changed. This is the cheap "has anything
+ * changed" check: one indexed count + one indexed single-row lookup,
+ * both served by the existing @@index([userId, readAt]) /
+ * @@index([userId, createdAt]) indexes — no row bodies fetched or
+ * serialized. The bell polls THIS on its normal interval and only calls
+ * listNotifications() (the expensive one) when latestId actually changes,
+ * or when the dropdown is opened.
+ */
+export async function peekNotifications(userId: string): Promise<{ unreadCount: number; latestId: string | null }> {
+  const [unreadCount, latest] = await Promise.all([
+    prisma.notification.count({ where: { userId, readAt: null } }),
+    prisma.notification.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
+  ]);
+  return { unreadCount, latestId: latest?.id ?? null };
+}
+
 /** Scoped by userId so a viewer can only ever mark their own as read. */
 export async function markAsRead(userId: string, notificationId: string) {
   const result = await prisma.notification.updateMany({

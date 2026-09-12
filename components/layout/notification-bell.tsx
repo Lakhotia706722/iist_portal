@@ -71,32 +71,66 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString();
 }
 
+type PeekResponse = { unreadCount: number; latestId: string | null };
+
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery({
+  // Phase 16 — P3.1: the bell's own poll is the highest-frequency "live"
+  // query in the app (8s, since it's also the fast-path trigger) — at
+  // 1000+ concurrent users, re-fetching and re-serializing up to 15 full
+  // notification rows every 8s per user is real, avoidable load. This
+  // cheap peek (one indexed count + one indexed single-row lookup, no
+  // notification bodies) runs on that tight interval instead; the
+  // expensive full list below is fetched only when something actually
+  // changed (or the dropdown opens), not on a timer.
+  const { data: peek } = useQuery({
+    queryKey: ["notifications-peek"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications/peek");
+      if (!res.ok) throw new Error("Failed to check notifications");
+      return res.json() as Promise<PeekResponse>;
+    },
+    refetchInterval: 8_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data, isLoading, refetch: refetchList } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
       const res = await fetch("/api/notifications?limit=15");
       if (!res.ok) throw new Error("Failed to load notifications");
       return res.json() as Promise<InboxResponse>;
     },
-    // Phase 15 — this now does double duty as the fast-path trigger for
-    // every other "live" query (see the effect below), not just keeping
-    // the badge current, so it runs on a tighter interval than before.
-    refetchInterval: 8_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    // Not on its own timer any more — triggered explicitly (below) when
+    // peek detects something new, or when the dropdown is opened.
+    enabled: false,
   });
 
-  // Phase 15 Step 3 — fast-path invalidation. Diffs each poll's result
-  // against the last-seen notification IDs; any genuinely new one
-  // immediately invalidates the query it relates to, rather than waiting
-  // for that query's own independent (slower) poll cycle. The very first
-  // load populates the seen-set without invalidating anything — those
-  // notifications aren't "new," they're just newly fetched.
+  // Phase 15 Step 3 — fast-path invalidation, now driven by peek() instead
+  // of the bell's own poll. Diffs each peek's latestId against the last
+  // one seen; a genuine change fetches the full list (for entityType) and
+  // invalidates the query it relates to, rather than waiting for that
+  // query's own independent (slower) poll cycle. The very first peek
+  // populates the seen id without treating it as "new".
+  const lastSeenId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!peek) return;
+    if (lastSeenId.current === undefined) {
+      lastSeenId.current = peek.latestId;
+      // Populate the dropdown's data once on mount so opening it later
+      // doesn't show a blank loading state for no reason.
+      refetchList();
+      return;
+    }
+    if (peek.latestId === lastSeenId.current) return;
+    lastSeenId.current = peek.latestId;
+    refetchList();
+  }, [peek, refetchList]);
+
   const seenIds = useRef<Set<string> | null>(null);
   useEffect(() => {
     if (!data) return;
@@ -117,6 +151,12 @@ export function NotificationBell() {
     keysToInvalidate.forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
   }, [data, qc]);
 
+  // Opening the dropdown before the first peek-triggered fetch landed
+  // (or if it somehow missed one) should never show stale/empty content.
+  useEffect(() => {
+    if (open && !data) refetchList();
+  }, [open, data, refetchList]);
+
   const markRead = useMutation({
     mutationFn: async (body: { id?: string; all?: boolean }) => {
       const res = await fetch("/api/notifications/read", {
@@ -129,6 +169,7 @@ export function NotificationBell() {
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications-peek"] });
       if (vars.all) {
         toast({ title: "All notifications marked read", variant: "success" });
       }
@@ -137,7 +178,10 @@ export function NotificationBell() {
       toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
-  const unread = data?.unreadCount ?? 0;
+  // Prefer peek's count — it's refreshed every 8s regardless of whether
+  // the full list has been fetched yet; data?.unreadCount is a fallback
+  // for the brief window before the first peek response lands.
+  const unread = peek?.unreadCount ?? data?.unreadCount ?? 0;
   const items = data?.notifications ?? [];
 
   return (
