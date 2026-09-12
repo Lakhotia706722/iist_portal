@@ -12,13 +12,12 @@ interface RouteParams {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await requirePermission("incident:write");
-    const formData = await request.formData();
-    const file = formData.get("file");
-    if (!(file instanceof File)) throw new BadRequestError("No file provided");
+    const { key } = await request.json();
+    if (!key || typeof key !== "string") throw new BadRequestError("No document key provided");
 
     const incident = await uploadIncidentDocument(
       params.id,
-      file,
+      key,
       user.id as string,
       extractRequestMeta(request)
     );

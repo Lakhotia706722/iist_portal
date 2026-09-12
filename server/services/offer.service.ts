@@ -17,7 +17,6 @@ import type {
   UpdateOfferInput,
   OfferFilters,
 } from "@/lib/validations/offer";
-import { randomUUID } from "crypto";
 
 type RequestMeta = Pick<AuditParams, "ipAddress" | "userAgent">;
 
@@ -402,29 +401,28 @@ export async function updateOfferStatus(
 
 // ─── Offer letter ─────────────────────────────────────────────────────────────
 
+/**
+ * Phase 16 — P5: `key` was already uploaded directly to storage by the
+ * client (see hooks/use-direct-upload.ts + POST /api/uploads/presign,
+ * which enforced PDF-only/10MB before issuing the upload URL) — this
+ * verifies the object exists, then records it, superseding any previous
+ * letter.
+ */
 export async function uploadOfferLetter(
   id: string,
-  file: File,
+  key: string,
   changedById: string,
   meta: RequestMeta = {}
 ): Promise<OfferWithDetails> {
   const before = await prisma.offer.findUnique({ where: { id } });
   if (!before) throw new NotFoundError("Offer not found");
 
-  if (file.type !== "application/pdf") {
-    throw new ValidationError("Offer letter must be a PDF");
-  }
-  const MAX_BYTES = 10 * 1024 * 1024;
-  if (file.size > MAX_BYTES) {
-    throw new ValidationError("Offer letter must be 10MB or smaller");
-  }
-
   const storage = getStorageAdapter();
-  const key = `offer-letters/${before.studentId}/${randomUUID()}.pdf`;
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await storage.upload(key, buffer, file.type);
+  if (!(await storage.exists(key))) {
+    throw new ValidationError("Upload did not complete — no object found at the given key. Please upload again.");
+  }
 
-  // Remove the superseded letter only after the new one is safely stored.
+  // Remove the superseded letter only after the new one is confirmed to exist.
   if (before.offerLetterKey) {
     try {
       await storage.delete(before.offerLetterKey);
@@ -446,7 +444,7 @@ export async function uploadOfferLetter(
     entityId: id,
     oldValues: { offerLetterKey: before.offerLetterKey },
     newValues: { offerLetterKey: key },
-    metadata: { fileName: file.name, sizeBytes: file.size },
+    metadata: { key },
     ...meta,
   });
 

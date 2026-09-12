@@ -16,6 +16,7 @@ import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { useToast } from "@/hooks/use-toast";
 import { formatDateTime } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 import { FileText, Upload, Presentation } from "lucide-react";
 
 type Talk = {
@@ -97,11 +98,18 @@ export function DrivePrePlacementTalk({ driveId }: { driveId: string }) {
       toast({ title: "Save failed", description: e.message, variant: "destructive" }),
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const upload = useMutation({
     mutationFn: async () => {
-      const fd = new FormData();
-      fd.append("file", file!);
-      const res = await fetch(`/api/admin/drives/${driveId}/ppt`, { method: "POST", body: fd });
+      // Phase 16 — P5: deck/JD goes straight to storage; only the key is
+      // sent here.
+      const key = await uploadDirect(file!, "ppt", { targetId: driveId });
+      const res = await fetch(`/api/admin/drives/${driveId}/ppt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Upload failed");
       return body;

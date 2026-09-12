@@ -21,17 +21,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const user = await requirePermission("offer:write");
     // Phase 7: offer:write is also held by COMPANY_REP — without this check
     // any company rep could upload a letter onto any company's offer.
+    // (Phase 16 — P5: the presign step already ran this same check before
+    // issuing the upload URL — re-checked here too since this confirm
+    // step is the one that actually writes to the DB.)
     await assertOfferOwnedByCallerIfCompanyRep(params.id, user as { id: string; role?: string });
 
-    const formData = await request.formData();
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
-      throw new BadRequestError("No offer letter file provided");
+    const { key } = await request.json();
+    if (!key || typeof key !== "string") {
+      throw new BadRequestError("No offer letter key provided");
     }
 
     const offer = await uploadOfferLetter(
       params.id,
-      file,
+      key,
       user.id as string,
       extractRequestMeta(request)
     );

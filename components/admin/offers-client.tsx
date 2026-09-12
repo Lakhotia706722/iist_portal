@@ -28,6 +28,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { StatusBadge, formatStatusLabel } from "@/components/shared/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 import { Award, Upload, FileText, Plus } from "lucide-react";
 import {
   OFFER_STATUSES,
@@ -232,13 +233,19 @@ export function OffersClient() {
       toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const letterMutation = useMutation({
     mutationFn: async (vars: { id: string; file: File }) => {
-      const fd = new FormData();
-      fd.append("file", vars.file);
+      // Phase 16 — P5: PDF goes straight to storage; only the key is
+      // sent here. targetId is the offer id — the presign step looks up
+      // the real studentId itself and re-runs the company-rep ownership
+      // check (see lib/uploads/presign.ts).
+      const key = await uploadDirect(vars.file, "offer-letters", { targetId: vars.id });
       const res = await fetch(`/api/admin/offers/${vars.id}/letter`, {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Upload failed");

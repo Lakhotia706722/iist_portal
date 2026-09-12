@@ -20,7 +20,9 @@
 import { requireRole, requirePermission } from "@/lib/rbac/server-guard";
 import { getStudentIdFromUserId } from "@/lib/auth/student-session";
 import { getStorageAdapter, buildStorageKey } from "@/lib/storage";
-import { ValidationError } from "@/lib/errors";
+import { ValidationError, NotFoundError } from "@/lib/errors";
+import { prisma } from "@/lib/prisma";
+import { assertOfferOwnedByCallerIfCompanyRep } from "@/server/services/company-rep.service";
 
 const STUDENT_DOC_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -117,24 +119,39 @@ const CATEGORIES: Record<string, CategoryConfig> = {
     allowedMimeTypes: ["application/pdf"],
     maxBytes: 10 * 1024 * 1024,
     storagePrefix: "offer-letters",
+    // targetId here is the OFFER id (what the admin UI actually has at
+    // upload time) — looked up server-side to get the real studentId,
+    // rather than trusting a client-supplied studentId, and re-runs the
+    // same company-rep ownership check the confirm route already does
+    // (offer:write is also held by COMPANY_REP) so a rep can't even get
+    // an upload URL for another company's offer.
     resolveOwnerId: async (req) => {
-      await requirePermission("offer:write");
-      return requireTargetId(req, "studentId");
+      const user = await requirePermission("offer:write");
+      const offerId = requireTargetId(req, "offerId");
+      await assertOfferOwnedByCallerIfCompanyRep(offerId, user as { id: string; role?: string });
+      const offer = await prisma.offer.findUnique({ where: { id: offerId }, select: { studentId: true } });
+      if (!offer) throw new NotFoundError("Offer not found");
+      return offer.studentId;
     },
   },
   "incident-evidence": {
     allowedMimeTypes: STUDENT_DOC_MIME_TYPES,
     maxBytes: 10 * 1024 * 1024,
     storagePrefix: "incident-evidence",
+    // targetId here is the INCIDENT id (what the admin UI actually has at
+    // upload time) — looked up server-side for the real studentId.
     resolveOwnerId: async (req) => {
       await requirePermission("incident:write");
-      return requireTargetId(req, "studentId");
+      const incidentId = requireTargetId(req, "incidentId");
+      const incident = await prisma.disciplineIncident.findUnique({ where: { id: incidentId }, select: { studentId: true } });
+      if (!incident) throw new NotFoundError("Incident not found");
+      return incident.studentId;
     },
   },
   ppt: {
     allowedMimeTypes: PPT_MIME_TYPES,
     maxBytes: 20 * 1024 * 1024,
-    storagePrefix: "ppt",
+    storagePrefix: "ppt-attachments", // matches the pre-existing key prefix
     resolveOwnerId: async (req) => {
       await requirePermission("drive:write");
       return requireTargetId(req, "driveId");

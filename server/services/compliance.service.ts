@@ -13,7 +13,7 @@ import type { Prisma, ComplianceStatus } from "@prisma/client";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAuditLog, type AuditParams } from "./audit.service";
 import { getPolicyValue } from "./policy.service";
-import { getStorageAdapter, buildStorageKey } from "@/lib/storage";
+import { getStorageAdapter } from "@/lib/storage";
 import type { IncidentInput, UpdateIncidentInput } from "@/lib/validations/compliance";
 
 type RequestMeta = Pick<AuditParams, "ipAddress" | "userAgent">;
@@ -164,26 +164,24 @@ export async function updateIncident(
   return incident;
 }
 
+/**
+ * Phase 16 — P5: `key` was already uploaded directly to storage by the
+ * client (type/size enforced by /api/uploads/presign before the upload
+ * URL was issued) — this verifies the object exists, then records it.
+ */
 export async function uploadIncidentDocument(
   id: string,
-  file: File,
+  key: string,
   actorId: string,
   meta: RequestMeta = {}
 ) {
   const incident = await prisma.disciplineIncident.findUnique({ where: { id } });
   if (!incident) throw new NotFoundError("Incident not found");
 
-  if (file.size > 10 * 1024 * 1024) {
-    throw new ValidationError("Supporting document must be 10MB or smaller");
-  }
-  const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
-  if (!allowed.includes(file.type)) {
-    throw new ValidationError("Supporting document must be a PDF or image");
-  }
-
   const storage = getStorageAdapter();
-  const key = buildStorageKey("incident-evidence", incident.studentId, file.name);
-  await storage.upload(key, Buffer.from(await file.arrayBuffer()), file.type);
+  if (!(await storage.exists(key))) {
+    throw new ValidationError("Upload did not complete — no object found at the given key. Please upload again.");
+  }
 
   if (incident.documentKey) {
     await storage.delete(incident.documentKey).catch(() => {});
@@ -201,7 +199,6 @@ export async function uploadIncidentDocument(
     entity: "DisciplineIncident",
     entityId: id,
     newValues: { documentKey: key },
-    metadata: { fileName: file.name },
     ...meta,
   });
 

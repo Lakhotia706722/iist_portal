@@ -122,6 +122,15 @@ export const documentUploadSchema = z.object({
   name: z.string().min(1, "Document name is required").max(200),
 });
 
+/** Phase 16 — P5: confirm step after a direct-to-storage upload — `key`/
+ * `mimeType`/`sizeBytes` replace the old multipart file (the client
+ * already has all three from the File object it just uploaded). */
+export const documentConfirmSchema = documentUploadSchema.extend({
+  key: z.string().min(1),
+  mimeType: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+});
+
 export const documentVerifySchema = z.object({
   action: z.enum(["VERIFIED", "REJECTED", "RE_UPLOAD_REQUESTED"]),
   adminNote: z.string().max(500).optional().or(z.literal("")),

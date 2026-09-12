@@ -13,22 +13,13 @@ import {
   addTalkAttachment,
 } from "@/server/services/calendar.service";
 import { prePlacementTalkSchema } from "@/lib/validations/calendar";
-import { getStorageAdapter, buildStorageKey } from "@/lib/storage";
+import { verifyUploadedObject } from "@/lib/uploads/presign";
 import { BadRequestError } from "@/lib/errors";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
   params: { id: string };
 }
-
-const MAX_BYTES = 20 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
-  "application/vnd.ms-powerpoint", // .ppt
-  "image/jpeg",
-  "image/png",
-];
 
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
@@ -58,19 +49,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await requirePermission("drive:write");
-    const formData = await request.formData();
-    const file = formData.get("file");
-    if (!(file instanceof File)) throw new BadRequestError("No file provided");
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      throw new BadRequestError("Attachment must be a PDF, PowerPoint file, or image");
-    }
-    if (file.size > MAX_BYTES) {
-      throw new BadRequestError("Attachment must be 20MB or smaller");
-    }
-
-    const key = buildStorageKey("ppt-attachments", params.id, file.name);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await getStorageAdapter().upload(key, buffer, file.type);
+    // Phase 16 — P5: the deck/JD goes straight to storage (type/size
+    // enforced by /api/uploads/presign before the upload URL was issued)
+    // — only the key is sent here.
+    const { key } = await request.json();
+    if (!key || typeof key !== "string") throw new BadRequestError("No attachment key provided");
+    await verifyUploadedObject(key);
 
     const talk = await addTalkAttachment(
       params.id,

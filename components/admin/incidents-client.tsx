@@ -30,6 +30,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { StatusBadge, formatStatusLabel } from "@/components/shared/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 import { ShieldAlert, Plus, Search, FileText, Upload } from "lucide-react";
 import {
   VIOLATION_TYPES,
@@ -178,13 +179,18 @@ export function IncidentsClient({ studentId }: { studentId?: string }) {
       toast({ title: "Update failed", description: e.message, variant: "destructive" }),
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const upload = useMutation({
     mutationFn: async () => {
-      const fd = new FormData();
-      fd.append("file", file!);
+      // Phase 16 — P5: evidence goes straight to storage; only the key
+      // is sent here. targetId is the incident id — the presign step
+      // looks up the real studentId itself.
+      const key = await uploadDirect(file!, "incident-evidence", { targetId: uploadTarget!.id });
       const res = await fetch(`/api/admin/incidents/${uploadTarget!.id}/document`, {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Upload failed");

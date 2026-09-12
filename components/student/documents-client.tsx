@@ -16,6 +16,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Plus, Trash2, Download, FolderOpen, CheckCircle, Clock, XCircle, RefreshCw } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   RESUME: "Resume", PAN_CARD: "PAN Card", COLLEGE_ID: "College ID",
@@ -61,14 +62,26 @@ export function DocumentsClient() {
     refetchIntervalInBackground: false,
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!docFile) throw new Error("No file selected");
       if (!docName.trim()) throw new Error("Document name is required");
-      const fd = new FormData();
-      fd.append("data", JSON.stringify({ type: docType, name: docName.trim() }));
-      fd.append("file", docFile);
-      const res = await fetch("/api/student/documents", { method: "POST", body: fd });
+      // Phase 16 — P5: the file goes straight to storage; only its key
+      // (plus the type/size the client already knows) is sent here.
+      const key = await uploadDirect(docFile, "documents");
+      const res = await fetch("/api/student/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: docType,
+          name: docName.trim(),
+          key,
+          mimeType: docFile.type,
+          sizeBytes: docFile.size,
+        }),
+      });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Upload failed"); }
       return res.json();
     },
