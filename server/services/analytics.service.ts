@@ -314,26 +314,43 @@ export async function getDepartmentBreakdown(): Promise<
     select: { id: true, name: true, branches: { select: { id: true } } },
   });
 
-  const rows = await Promise.all(
-    departments.map(async (d) => {
-      const branchIds = d.branches.map((b) => b.id);
-      const [total, placed] = await Promise.all([
-        prisma.student.count({ where: { branchId: { in: branchIds } } }),
-        prisma.student.count({
-          where: { branchId: { in: branchIds }, offers: { some: { status: { in: ["ACCEPTED", "JOINED"] } } } },
-        }),
-      ]);
-      return {
-        departmentId: d.id,
-        departmentName: d.name,
-        totalStudents: total,
-        placed,
-        placementRate: total > 0 ? Number(((placed / total) * 100).toFixed(1)) : 0,
-      };
-    })
-  );
+  // Phase 16 — P1.3: was 2 queries * department count (one N+1 per
+  // department) — replaced with 2 queries total, then a plain in-memory
+  // join against the small (institute-sized) department list.
+  const branchIdToDept = new Map<string, string>();
+  for (const d of departments) {
+    for (const b of d.branches) branchIdToDept.set(b.id, d.id);
+  }
+  const [totalByBranch, placedByBranch] = await Promise.all([
+    prisma.student.groupBy({ by: ["branchId"], _count: { _all: true } }),
+    prisma.student.groupBy({
+      by: ["branchId"],
+      where: { offers: { some: { status: { in: ["ACCEPTED", "JOINED"] } } } },
+      _count: { _all: true },
+    }),
+  ]);
+  const totalByDept = new Map<string, number>();
+  for (const row of totalByBranch) {
+    const deptId = branchIdToDept.get(row.branchId);
+    if (deptId) totalByDept.set(deptId, (totalByDept.get(deptId) ?? 0) + row._count._all);
+  }
+  const placedByDept = new Map<string, number>();
+  for (const row of placedByBranch) {
+    const deptId = branchIdToDept.get(row.branchId);
+    if (deptId) placedByDept.set(deptId, (placedByDept.get(deptId) ?? 0) + row._count._all);
+  }
 
-  return rows;
+  return departments.map((d) => {
+    const total = totalByDept.get(d.id) ?? 0;
+    const placed = placedByDept.get(d.id) ?? 0;
+    return {
+      departmentId: d.id,
+      departmentName: d.name,
+      totalStudents: total,
+      placed,
+      placementRate: total > 0 ? Number(((placed / total) * 100).toFixed(1)) : 0,
+    };
+  });
 }
 
 // ─── Company analytics ──────────────────────────────────────────────────────────
@@ -399,19 +416,25 @@ export async function listCompanySummaries(): Promise<
     orderBy: { name: "asc" },
   });
 
-  return Promise.all(
-    companies.map(async (c) => {
-      const agg = await prisma.offer.aggregate({
-        where: { companyId: c.id, status: { notIn: ["WITHDRAWN"] } },
-        _avg: { ctc: true },
-      });
-      return {
-        id: c.id,
-        name: c.name,
-        driveCount: c._count.drives,
-        offerCount: c._count.offers,
-        avgCtc: agg._avg.ctc ? Number(agg._avg.ctc.toFixed(2)) : null,
-      };
-    })
-  );
+  // Phase 16 — P1.3: was 1 aggregate query per company (a real N+1 — this
+  // list grows every placement season and was already 28+ companies deep
+  // in this project's own dev/test data) — replaced with one groupBy for
+  // every company's avg CTC at once.
+  const avgCtcByCompany = await prisma.offer.groupBy({
+    by: ["companyId"],
+    where: { status: { notIn: ["WITHDRAWN"] } },
+    _avg: { ctc: true },
+  });
+  const avgCtcMap = new Map(avgCtcByCompany.map((r) => [r.companyId, r._avg.ctc]));
+
+  return companies.map((c) => {
+    const avg = avgCtcMap.get(c.id) ?? null;
+    return {
+      id: c.id,
+      name: c.name,
+      driveCount: c._count.drives,
+      offerCount: c._count.offers,
+      avgCtc: avg ? Number(avg.toFixed(2)) : null,
+    };
+  });
 }

@@ -4,7 +4,20 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Phase 16 — P1.1: at 1000+ concurrent users, each Vercel serverless
+  // function instance opens its own Postgres connection; without a pooler
+  // in front, real concurrent load exhausts Postgres's connection limit
+  // suddenly, not gradually. DATABASE_URL must be the provider's *pooled*
+  // connection string (Neon: the "-pooler" host; Supabase: the pooler
+  // port/connection string, typically 6543 with pgbouncer=true) for every
+  // runtime query. directUrl is the *unpooled* connection, used only by
+  // `prisma migrate` — schema migrations (especially anything requiring an
+  // advisory lock or DDL) are unreliable through a transaction-mode pooler.
+  // Locally this is still plain, unpooled Postgres — both env vars point at
+  // the same local DB until a real Neon/Supabase project exists (see
+  // .env.example and LAUNCH_CHECKLIST.md for the exact values to set then).
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -295,6 +308,11 @@ model Student {
   @@index([branchId])
   @@index([batchId])
   @@index([profileStatus])
+  // Phase 16 — P1.2: reports/directory/calendar-audience filters commonly
+  // scope by branch AND batch together (e.g. "AE, 2021-2025 batch") — the
+  // two separate single-column indexes above still require Postgres to
+  // intersect two index scans; a composite serves that combination directly.
+  @@index([branchId, batchId])
 }
 
 // ─── Academic Record ─────────────────────────────────────────────────────────
@@ -336,6 +354,12 @@ model AcademicRecord {
   student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  // Phase 16 — P1.2: shortlist.service.ts filters (minCgpa/maxCgpa) AND
+  // sorts by currentCgpa at the DB level — a real, unindexed range
+  // filter+sort that scans every AcademicRecord row per shortlisting-queue
+  // request without this.
+  @@index([currentCgpa])
 }
 
 model SgpaRecord {
@@ -927,6 +951,11 @@ model Application {
   @@index([jobRoleId])
   @@index([status])
   @@index([appliedAt])
+  // Phase 16 — P1.2: "applicants in this drive with this status" (shortlist
+  // queue, attendance/rounds views, drive-dashboard stats) is the single
+  // hottest list query in the app under real load — serve it with one
+  // composite instead of intersecting two single-column indexes every time.
+  @@index([driveId, status])
 }
 
 model ApplicationStatusHistory {
@@ -1501,4 +1530,8 @@ model AuditLog {
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+  // Phase 16 — P1.2: the audit log viewer's real usage is "this entity type,
+  // within a date range" — a composite serves that directly instead of
+  // intersecting the two single-column indexes above.
+  @@index([entity, createdAt])
 }
