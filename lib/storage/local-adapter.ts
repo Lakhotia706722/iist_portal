@@ -1,6 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
+import crypto from "crypto";
 import type { StorageAdapter } from "./index";
+
+/** Shared with app/api/uploads/local-put/route.ts — dev-only signing, see there. */
+export function signLocalPutUrl(key: string, expiresAtMs: number): string {
+  const secret = process.env.AUTH_SECRET ?? "dev-only-insecure-secret";
+  return crypto.createHmac("sha256", secret).update(`${key}:${expiresAtMs}`).digest("hex");
+}
 
 export class LocalStorageAdapter implements StorageAdapter {
   private basePath: string;
@@ -21,6 +28,17 @@ export class LocalStorageAdapter implements StorageAdapter {
 
   async getSignedUrl(key: string, _expiresInSeconds = 3600): Promise<string> {
     return `${this.baseUrl}/api/files/${encodeURIComponent(key)}`;
+  }
+
+  async getPresignedUploadUrl(key: string, _mimeType: string, expiresInSeconds = 300): Promise<string> {
+    // Local dev has no direct-to-disk equivalent a browser can PUT to —
+    // this points at a small dedicated route instead (never used in
+    // production; STORAGE_DRIVER=local is dev-only, see .env.example),
+    // signed so it isn't an open write oracle even in dev.
+    const expiresAtMs = Date.now() + expiresInSeconds * 1000;
+    const sig = signLocalPutUrl(key, expiresAtMs);
+    const params = new URLSearchParams({ key, exp: String(expiresAtMs), sig });
+    return `${this.baseUrl}/api/uploads/local-put?${params.toString()}`;
   }
 
   async download(key: string): Promise<Buffer> {

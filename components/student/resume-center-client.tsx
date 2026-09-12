@@ -19,6 +19,7 @@ import {
   Download, Clock, ChevronDown, ChevronUp, Star,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 
 type ResumeVersion = { id: string; version: number; isGenerated: boolean; notes: string | null; fileUrl: string | null; createdAt: string };
 type ResumeItem = { id: string; name: string; isDefault: boolean; createdAt: string; updatedAt: string; versions: ResumeVersion[]; _count: { versions: number } };
@@ -75,11 +76,19 @@ export function ResumeCenterClient() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["student-resumes"] }); setDeleteTarget(null); },
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const uploadVersionMutation = useMutation({
     mutationFn: async ({ resumeId, file, notes }: { resumeId: string; file: File | null; notes: string }) => {
       if (file) {
-        const fd = new FormData(); fd.append("file", file); fd.append("notes", notes);
-        const res = await fetch(`/api/student/resumes/${resumeId}/versions`, { method: "POST", body: fd });
+        // Phase 16 — P5: PDF goes straight to storage (presigned URL),
+        // never through this Next.js route — only the resulting key does.
+        const key = await uploadDirect(file, "resumes");
+        const res = await fetch(`/api/student/resumes/${resumeId}/versions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, notes }),
+        });
         if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Upload failed"); }
         return res.json();
       } else {

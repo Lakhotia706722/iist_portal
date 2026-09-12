@@ -70,6 +70,16 @@ export class S3StorageAdapter implements StorageAdapter {
     });
   }
 
+  async getPresignedUploadUrl(key: string, mimeType: string, expiresInSeconds = 300): Promise<string> {
+    // Short expiry (5 min default) — this URL is single-purpose (upload
+    // this one file, right now), unlike the longer-lived download URL above.
+    return presign(
+      this.client,
+      new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: mimeType }),
+      { expiresIn: expiresInSeconds }
+    );
+  }
+
   async download(key: string): Promise<Buffer> {
     const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
     const chunks: Buffer[] = [];

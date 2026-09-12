@@ -14,6 +14,21 @@ export interface StorageAdapter {
   upload(key: string, buffer: Buffer, mimeType: string): Promise<string>;
   /** A URL the browser can fetch the object from. */
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  /**
+   * Phase 16 — P5: a short-lived URL the browser can PUT bytes to
+   * *directly*, bypassing a Next.js API route entirely — the fix for
+   * large-file uploads proxying through (and counting against) a
+   * serverless function's request body size limit and execution time.
+   * The S3 adapter returns a real presigned PUT URL (client PUTs straight
+   * to R2/S3). The local adapter (dev-only — see STORAGE_DRIVER's own
+   * docs, production always uses "s3") has no direct-to-disk equivalent a
+   * browser can PUT to, so it returns a URL back to this app's own
+   * /api/uploads/local-put route, keeping the 3-step
+   * presign-PUT-confirm flow identical in both drivers even though local
+   * dev's "direct" upload still technically passes through one small
+   * dedicated Next.js route.
+   */
+  getPresignedUploadUrl(key: string, mimeType: string, expiresInSeconds?: number): Promise<string>;
   /** Read the object back. Throws if it does not exist. */
   download(key: string): Promise<Buffer>;
   /** True when the object exists. */

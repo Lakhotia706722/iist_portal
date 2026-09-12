@@ -149,6 +149,13 @@ export const resumeVersionNoteSchema = z.object({
   notes: z.string().max(500).optional().or(z.literal("")),
 });
 
+/** Phase 16 — P5: confirm step after a direct-to-storage upload (see
+ * hooks/use-direct-upload.ts) — `key` replaces the old multipart file. */
+export const resumeVersionUploadSchema = z.object({
+  key: z.string().min(1),
+  notes: z.string().max(500).optional().or(z.literal("")),
+});
+
 // ─── Inferred Types ───────────────────────────────────────────────────────────
 
 export type SkillCatalogInput = z.infer<typeof skillCatalogSchema>;
