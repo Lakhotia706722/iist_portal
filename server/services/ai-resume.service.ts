@@ -161,7 +161,8 @@ export interface ResumeDraftResult {
 export async function generateResumeDraft(
   studentId: string,
   targetRole: string,
-  jobDescription: string
+  jobDescription: string,
+  userId: string
 ): Promise<ResumeDraftResult> {
   const facts = await getVerifiedFacts(studentId);
   if (facts.length === 0) {
@@ -174,7 +175,8 @@ export async function generateResumeDraft(
   const raw = await provider.draftResumeBullets(
     facts.map((f) => f.text),
     targetRole,
-    jobDescription
+    jobDescription,
+    userId
   );
 
   const { bullets, droppedCount } = enforceTraceability(raw, facts);
@@ -241,18 +243,19 @@ export async function approveResumeDraft(
 
 export async function matchResumeToJD(
   studentId: string,
-  jobDescription: string
+  jobDescription: string,
+  userId: string
 ): Promise<ResumeMatchResult> {
   const facts = await getVerifiedFacts(studentId);
   if (facts.length === 0) {
     throw new ValidationError("Add profile data before requesting a match score.");
   }
   const resumeText = facts.map((f) => f.text).join("\n");
-  return getAIProvider().generateResumeMatch(resumeText, jobDescription);
+  return getAIProvider().generateResumeMatch(resumeText, jobDescription, userId);
 }
 
-export async function analyzeJobDescription(jobDescription: string) {
-  return getAIProvider().analyzeJD(jobDescription);
+export async function analyzeJobDescription(jobDescription: string, userId: string) {
+  return getAIProvider().analyzeJD(jobDescription, userId);
 }
 
 export interface SkillGapResult {
@@ -266,11 +269,12 @@ export interface SkillGapResult {
 
 export async function getSkillGap(
   studentId: string,
-  jobDescription: string
+  jobDescription: string,
+  userId: string
 ): Promise<SkillGapResult> {
   const [facts, jd] = await Promise.all([
     getVerifiedFacts(studentId),
-    getAIProvider().analyzeJD(jobDescription),
+    getAIProvider().analyzeJD(jobDescription, userId),
   ]);
 
   const haveTokens = new Set(
@@ -348,24 +352,25 @@ export async function getJobRecommendations(studentId: string): Promise<JobRecom
 
 // ─── Career recommendations (advisory, clearly AI-generated) ──────────────────
 
-export async function getCareerRecommendations(studentId: string, interests?: string) {
+export async function getCareerRecommendations(studentId: string, interests: string | undefined, userId: string) {
   const facts = await getVerifiedFacts(studentId);
   if (facts.length === 0) {
     throw new ValidationError("Add profile data before requesting career recommendations.");
   }
   return getAIProvider().careerRecommendations(
     facts.map((f) => f.text),
-    interests
+    interests,
+    userId
   );
 }
 
 // ─── Interview practice (ephemeral — not the official MockInterview record) ───
 
-export async function getInterviewPracticeFeedback(question: string, answer: string) {
+export async function getInterviewPracticeFeedback(question: string, answer: string, userId: string) {
   if (question.trim().length < 5 || answer.trim().length < 5) {
     throw new ValidationError("Provide both a question and an answer of reasonable length.");
   }
-  return getAIProvider().mockInterviewFeedback(question, answer);
+  return getAIProvider().mockInterviewFeedback(question, answer, userId);
 }
 
 export { isAIConfigured };

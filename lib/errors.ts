@@ -60,3 +60,14 @@ export class ServiceUnavailableError extends Error {
     super(message);
   }
 }
+
+/** Phase 16 — P6: thrown when a per-user AI usage cap (burst or daily) is hit. */
+export class RateLimitedError extends Error {
+  name = "RateLimitedError";
+  retryAfterSeconds: number;
+
+  constructor(message: string, retryAfterSeconds: number) {
+    super(message);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}

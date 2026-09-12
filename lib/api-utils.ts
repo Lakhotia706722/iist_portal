@@ -133,6 +133,14 @@ export function handleApiError(error: unknown): NextResponse {
           error: error.message,
           code: "SERVICE_UNAVAILABLE",
         }, { status: 503 });
+
+      case "RateLimitedError": {
+        const retryAfterSeconds = (error as import("./errors").RateLimitedError).retryAfterSeconds;
+        return NextResponse.json({
+          error: error.message,
+          code: "RATE_LIMITED",
+        }, { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } });
+      }
     }
   }
 

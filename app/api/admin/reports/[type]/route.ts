@@ -11,8 +11,9 @@ import { requirePermission } from "@/lib/rbac/server-guard";
 import { writeAuditLog, extractRequestMeta } from "@/server/services/audit.service";
 import { REPORTS } from "@/lib/reports/registry";
 import { toCSV, toXLSX, toPDF, contentTypeFor, extensionFor } from "@/lib/reports/serialize";
-import { NotFoundError, BadRequestError } from "@/lib/errors";
+import { NotFoundError, BadRequestError, RateLimitedError } from "@/lib/errors";
 import { handleApiError } from "@/lib/api-utils";
+import { checkRateLimitForKey } from "@/lib/rate-limit";
 
 interface RouteParams {
   params: { type: string };
@@ -21,6 +22,18 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const user = await requirePermission("report:read");
+
+    // Phase 16 — P2.2: report generation is real DB + CPU work (query,
+    // then CSV/XLSX/PDF serialization) — rate-limit per admin so a
+    // scripted loop (or an accidental refresh-mashing) can't turn this
+    // into a self-inflicted load problem.
+    const limit = await checkRateLimitForKey(user.id as string, { bucket: "report-generate", limit: 10, windowMs: 60_000 });
+    if (!limit.allowed) {
+      throw new RateLimitedError(
+        "Too many report exports in a short time. Please wait a moment and try again.",
+        Math.max(1, Math.ceil((limit.resetAt - Date.now()) / 1000))
+      );
+    }
 
     const report = REPORTS[params.type];
     if (!report) throw new NotFoundError(`Unknown report: ${params.type}`);

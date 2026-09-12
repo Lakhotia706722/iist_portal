@@ -66,23 +66,27 @@ export interface CareerRecommendation {
 export interface AIProvider {
   generateResumeMatch(
     resumeText: string,
-    jobDescription: string
+    jobDescription: string,
+    userId: string
   ): Promise<ResumeMatchResult>;
-  analyzeJD(jobDescription: string): Promise<JDAnalysisResult>;
-  suggestImprovements(resumeText: string): Promise<ResumeImprovementSuggestion[]>;
+  analyzeJD(jobDescription: string, userId: string): Promise<JDAnalysisResult>;
+  suggestImprovements(resumeText: string, userId: string): Promise<ResumeImprovementSuggestion[]>;
   mockInterviewFeedback(
     question: string,
-    answer: string
+    answer: string,
+    userId: string
   ): Promise<MockInterviewFeedback>;
   /** Draft resume bullets from a fixed list of verified facts — must not invent facts. */
   draftResumeBullets(
     verifiedFacts: string[],
     targetRole: string,
-    jobDescription: string
+    jobDescription: string,
+    userId: string
   ): Promise<DraftBullet[]>;
   careerRecommendations(
     verifiedFacts: string[],
-    interests?: string
+    interests: string | undefined,
+    userId: string
   ): Promise<CareerRecommendation[]>;
 }
 

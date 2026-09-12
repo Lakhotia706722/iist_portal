@@ -1510,6 +1510,25 @@ model ComplianceOverride {
   student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
 }
 
+// ─── Phase 16: AI usage governance (P6) ──────────────────────────────────────
+
+/// One row per successful Anthropic API call. Written by lib/ai/anthropic-provider.ts
+/// after every call — cost visibility "as it happens", not discovered at the
+/// end of a billing cycle. Rough cost estimate only (a fixed $/token constant
+/// documented next to where it's computed); not a billing-accurate ledger.
+model AiUsageLog {
+  id             String   @id @default(cuid())
+  userId         String
+  feature        String   // e.g. "resume-draft", "jd-analysis", "career-recommendations"
+  inputTokens    Int
+  outputTokens   Int
+  estimatedCostUsd Float
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 model AuditLog {
