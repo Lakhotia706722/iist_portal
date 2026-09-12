@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Plus, Pencil, Trash2, GitBranch, ExternalLink, FolderGit2, X, Image as ImageIcon } from "lucide-react";
 import NextImage from "next/image";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 
 type ProjectItem = {
   id: string; title: string; description: string; techStack: string[];
@@ -49,22 +50,17 @@ export function ProjectsClient() {
   const techStack = form.watch("techStack") as string[];
   const isOngoing = form.watch("isOngoing");
 
+  const { uploadDirect } = useDirectUpload();
+
   const saveMutation = useMutation({
     mutationFn: async (values: ProjectInput) => {
       const url = editing ? `/api/student/profile/projects/${editing.id}` : "/api/student/profile/projects";
       const method = editing ? "PATCH" : "POST";
-      let body: BodyInit;
-      let headers: HeadersInit | undefined;
-
-      if (imageFile) {
-        const fd = new FormData();
-        fd.append("data", JSON.stringify(values));
-        fd.append("image", imageFile);
-        body = fd;
-      } else {
-        body = JSON.stringify(values);
-        headers = { "Content-Type": "application/json" };
-      }
+      // Phase 16 — P5: image goes straight to storage; only the key is
+      // sent here.
+      const imageKey = imageFile ? await uploadDirect(imageFile, "projects") : undefined;
+      const body = JSON.stringify({ ...values, imageKey });
+      const headers: HeadersInit = { "Content-Type": "application/json" };
 
       const res = await fetch(url, { method, headers, body });
       if (!res.ok) { const e = await res.json(); throw new Error(JSON.stringify(e.error)); }

@@ -18,6 +18,7 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Trophy, Paperclip } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 
 const TYPE_LABELS: Record<string, string> = {
   HACKATHON: "Hackathon", COMPETITION: "Competition", ACADEMIC: "Academic",
@@ -57,12 +58,16 @@ export function AchievementsClient() {
     defaultValues: { type: "HACKATHON", title: "", description: "", date: "", position: "", organizer: "" },
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const saveMutation = useMutation({
     mutationFn: async (values: AchievementInput) => {
       const url = editing ? `/api/student/profile/achievements/${editing.id}` : "/api/student/profile/achievements";
-      let body: BodyInit; let headers: HeadersInit | undefined;
-      if (certFile) { const fd = new FormData(); fd.append("data", JSON.stringify(values)); fd.append("certificate", certFile); body = fd; }
-      else { body = JSON.stringify(values); headers = { "Content-Type": "application/json" }; }
+      // Phase 16 — P5: certificate goes straight to storage; only the key
+      // is sent here.
+      const fileKey = certFile ? await uploadDirect(certFile, "achievements") : undefined;
+      const body = JSON.stringify({ ...values, fileKey });
+      const headers: HeadersInit = { "Content-Type": "application/json" };
       const res = await fetch(url, { method: editing ? "PATCH" : "POST", headers, body });
       if (!res.ok) { const e = await res.json(); throw new Error(JSON.stringify(e.error)); }
       return res.json();

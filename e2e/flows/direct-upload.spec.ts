@@ -68,3 +68,48 @@ test("Resume PDF upload goes through the direct-to-storage flow end to end", asy
   await prisma.resumeVersion.deleteMany({ where: { resumeId: resume.id } });
   await prisma.resume.delete({ where: { id: resume.id } });
 });
+
+/**
+ * Certifications/achievements/internships all migrated through the same
+ * shared server helper (app/api/student/profile/_helpers.ts) — this
+ * covers the pattern once, through the real UI, for certifications.
+ */
+test("Certification upload with a certificate file goes through the direct-to-storage flow", async ({ page }) => {
+  test.setTimeout(60_000);
+  const certName = `E2E Direct Upload Cert ${Date.now()}`;
+
+  let confirmRequestBody: string | null = null;
+  page.on("request", (req) => {
+    if (req.url().includes("/api/student/profile/certifications") && req.method() === "POST") {
+      confirmRequestBody = req.postData();
+    }
+  });
+
+  await login(page, ACCOUNTS.studentA.id);
+  await page.goto("/student/profile/certifications");
+  await page.getByRole("button", { name: /add certification/i }).first().click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+
+  await page.getByLabel(/certification name/i).fill(certName);
+  await page.getByLabel(/issuing organization/i).fill("E2E Test Org");
+  await page.locator("#cert-issue").fill("2024-01-15");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "e2e-cert.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 fake certificate for the direct-upload e2e test"),
+  });
+  await dialog.getByRole("button", { name: /add certification/i }).click();
+  await expect(dialog).toBeHidden({ timeout: 15_000 });
+
+  expect(confirmRequestBody).not.toBeNull();
+  const parsed = JSON.parse(confirmRequestBody!);
+  expect(parsed.fileKey).toMatch(/^certifications\//);
+  expect(parsed).not.toHaveProperty("certificate");
+
+  const student = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
+  const cert = await prisma.certification.findFirstOrThrow({ where: { studentId: student.id, name: certName } });
+  expect(cert.certificateKey).toBe(parsed.fileKey);
+
+  await prisma.certification.delete({ where: { id: cert.id } });
+});

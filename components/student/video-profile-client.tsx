@@ -12,6 +12,7 @@ import { FormField } from "@/components/ui/form-field";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { Video, Upload, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
+import { useDirectUpload } from "@/hooks/use-direct-upload";
 
 type VideoProfile = {
   id?: string; status: string; videoUrl?: string | null; videoFileUrl?: string | null;
@@ -45,18 +46,17 @@ export function VideoProfileClient() {
     defaultValues: { videoUrl: "" },
   });
 
+  const { uploadDirect } = useDirectUpload();
+
   const saveMutation = useMutation({
     mutationFn: async (values: VideoProfileInput) => {
-      let body: BodyInit; let headers: HeadersInit | undefined;
-      if (uploadMode === "file" && videoFile) {
-        const fd = new FormData();
-        fd.append("data", JSON.stringify({ videoUrl: "" }));
-        fd.append("video", videoFile);
-        body = fd;
-      } else {
-        body = JSON.stringify(values);
-        headers = { "Content-Type": "application/json" };
-      }
+      // Phase 16 — P5: video goes straight to storage (presigned URL,
+      // 100MB cap enforced there); only the key is sent here.
+      const body =
+        uploadMode === "file" && videoFile
+          ? JSON.stringify({ videoUrl: "", videoKey: await uploadDirect(videoFile, "videos") })
+          : JSON.stringify(values);
+      const headers: HeadersInit = { "Content-Type": "application/json" };
       const res = await fetch("/api/student/profile/video", { method: "POST", headers, body });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Upload failed"); }
       return res.json();

@@ -5,7 +5,7 @@ import { requireRole, errorResponse } from "@/lib/rbac/server-guard";
 import { prisma } from "@/lib/prisma";
 import { projectSchema } from "@/lib/validations/profile";
 import { getProjects, createProject } from "@/server/services/project.service";
-import { uploadFile } from "../_helpers";
+import { verifyUploadedObject } from "@/lib/uploads/presign";
 
 async function getStudentId(userId: string) {
   const s = await prisma.student.findUniqueOrThrow({ where: { userId }, select: { id: true } });
@@ -26,24 +26,11 @@ export async function POST(req: NextRequest) {
   try {
     const actor = await requireRole("STUDENT");
     const studentId = await getStudentId(actor.id);
-    const contentType = req.headers.get("content-type") ?? "";
-
-    let imageKey: string | undefined;
-    let body: any;
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      body = JSON.parse(formData.get("data") as string);
-      const file = formData.get("image") as File | null;
-      if (file) {
-        imageKey = await uploadFile(file, "projects", studentId, {
-          allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-          maxBytes: 5 * 1024 * 1024, // 5 MB
-        });
-      }
-    } else {
-      body = await req.json();
-    }
+    // Phase 16 — P5: the client uploads the image directly to storage
+    // (see hooks/use-direct-upload.ts) and sends the resulting key as a
+    // plain JSON field — no more multipart parsing here.
+    const { imageKey, ...body } = await req.json();
+    if (imageKey) await verifyUploadedObject(imageKey);
 
     const parsed = projectSchema.safeParse(body);
     if (!parsed.success)

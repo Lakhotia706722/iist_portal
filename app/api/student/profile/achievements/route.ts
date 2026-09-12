@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const actor = await requireRole("STUDENT");
     const studentId = await getStudentIdFromUserId(actor.id);
-    const { body, fileKey } = await parseBodyWithOptionalFile(req, "certificate", "achievements", studentId);
+    const { body, fileKey } = await parseBodyWithOptionalFile(req);
     const parsed = achievementSchema.safeParse(body);
     if (!parsed.success)
       return Response.json({ error: parsed.error.flatten() }, { status: 422 });

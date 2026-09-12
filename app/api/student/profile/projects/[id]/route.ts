@@ -3,7 +3,7 @@ import { requireRole, errorResponse } from "@/lib/rbac/server-guard";
 import { prisma } from "@/lib/prisma";
 import { projectSchema } from "@/lib/validations/profile";
 import { updateProject, deleteProject } from "@/server/services/project.service";
-import { uploadFile } from "../../_helpers";
+import { verifyUploadedObject } from "@/lib/uploads/presign";
 
 async function getStudentId(userId: string) {
   const s = await prisma.student.findUniqueOrThrow({ where: { userId }, select: { id: true } });
@@ -14,24 +14,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     const actor = await requireRole("STUDENT");
     const studentId = await getStudentId(actor.id);
-    const contentType = req.headers.get("content-type") ?? "";
-
-    let imageKey: string | undefined;
-    let body: any;
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      body = JSON.parse(formData.get("data") as string);
-      const file = formData.get("image") as File | null;
-      if (file) {
-        imageKey = await uploadFile(file, "projects", studentId, {
-          allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"],
-          maxBytes: 5 * 1024 * 1024, // 5 MB
-        });
-      }
-    } else {
-      body = await req.json();
-    }
+    // Phase 16 — P5: see the sibling POST route's comment.
+    const { imageKey, ...body } = await req.json();
+    if (imageKey) await verifyUploadedObject(imageKey);
 
     const parsed = projectSchema.partial().safeParse(body);
     if (!parsed.success)

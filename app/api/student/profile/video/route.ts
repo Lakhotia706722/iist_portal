@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 import { requireRole, errorResponse } from "@/lib/rbac/server-guard";
 import { videoProfileSchema } from "@/lib/validations/profile";
 import { getVideoProfile, upsertVideoProfile } from "@/server/services/video-profile.service";
-import { getStudentIdFromUserId, uploadFile } from "../_helpers";
+import { getStudentIdFromUserId } from "../_helpers";
+import { verifyUploadedObject } from "@/lib/uploads/presign";
 
 export async function GET(_req: NextRequest) {
   try {
@@ -21,33 +22,12 @@ export async function POST(req: NextRequest) {
   try {
     const actor = await requireRole("STUDENT");
     const studentId = await getStudentIdFromUserId(actor.id);
-    const contentType = req.headers.get("content-type") ?? "";
-
-    let body: any;
-    let videoKey: string | undefined;
-
-    if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      body = JSON.parse((formData.get("data") as string) ?? "{}");
-      const file = formData.get("video") as File | null;
-      if (file) {
-        // Validate file type and size server-side
-        const allowedTypes = ["video/mp4", "video/webm", "video/quicktime"];
-        if (!allowedTypes.includes(file.type)) {
-          return Response.json(
-            { error: "Only MP4, WebM and MOV video files are allowed" },
-            { status: 422 }
-          );
-        }
-        const maxBytes = 100 * 1024 * 1024; // 100 MB
-        if (file.size > maxBytes) {
-          return Response.json({ error: "Video file must be under 100 MB" }, { status: 422 });
-        }
-        videoKey = await uploadFile(file, "videos", studentId);
-      }
-    } else {
-      body = await req.json();
-    }
+    // Phase 16 — P5: the client uploads the video directly to storage
+    // (see hooks/use-direct-upload.ts) — type/size were already validated
+    // by /api/uploads/presign before the upload URL was issued, so no
+    // second check is needed here beyond confirming the object exists.
+    const { videoKey, ...body } = await req.json();
+    if (videoKey) await verifyUploadedObject(videoKey);
 
     const parsed = videoProfileSchema.safeParse(body);
     if (!parsed.success)
