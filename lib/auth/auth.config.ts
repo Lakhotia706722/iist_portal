@@ -39,6 +39,9 @@ export const authConfig: NextAuthConfig = {
       return true;
     },
     jwt({ token, user, trigger, session }) {
+      // TEMPORARY — see matching note in lib/auth/auth.ts.
+      const debugTiming = process.env.DEBUG_AUTH_TIMING === "true";
+      const tJwt0 = debugTiming ? performance.now() : 0;
       if (user) {
         token.id = user.id as string;
         token.role = (user as any).role;
@@ -63,9 +66,14 @@ export const authConfig: NextAuthConfig = {
         if (typeof session.onboardingStep === "number") token.onboardingStep = session.onboardingStep;
         if (typeof session.mustChangePassword === "boolean") token.mustChangePassword = session.mustChangePassword;
       }
+      if (debugTiming && user) {
+        console.log(`[AUTH_TIMING] jwt() callback (sign-in): ${(performance.now() - tJwt0).toFixed(1)}ms`);
+      }
       return token;
     },
     session({ session, token }) {
+      const debugTiming = process.env.DEBUG_AUTH_TIMING === "true";
+      const tSession0 = debugTiming ? performance.now() : 0;
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as any;
@@ -73,6 +81,9 @@ export const authConfig: NextAuthConfig = {
         session.user.studentId = token.studentId as string | undefined;
         session.user.enrollmentNumber = token.enrollmentNumber as string | undefined;
         session.user.onboardingStep = token.onboardingStep as number | undefined;
+      }
+      if (debugTiming) {
+        console.log(`[AUTH_TIMING] session() callback: ${(performance.now() - tSession0).toFixed(1)}ms`);
       }
       return session;
     },

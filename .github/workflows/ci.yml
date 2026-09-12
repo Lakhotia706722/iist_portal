@@ -12,6 +12,11 @@ env:
   LOCAL_STORAGE_PATH: "./uploads"
   NEXT_PUBLIC_APP_URL: "http://localhost:4242"
   E2E_BASE_URL: "http://localhost:4242"
+  # TEMPORARY — investigating intermittent e2e login-timeout failures.
+  # Turns on [AUTH_TIMING] logging in lib/auth/*, the login form, and the
+  # e2e login() helper. Remove once the bottleneck is found and fixed.
+  DEBUG_AUTH_TIMING: "true"
+  NEXT_PUBLIC_DEBUG_AUTH_TIMING: "true"
 
 jobs:
   # Fast, DB-free checks — typecheck, lint, and the two Phase 12 standing

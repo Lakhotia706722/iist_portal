@@ -13,22 +13,43 @@ export const ACCOUNTS = {
   repB: { id: "e2e-rep-b@example.com", email: "e2e-rep-b@example.com", role: "COMPANY_REP" },
 } as const;
 
+// TEMPORARY — CI login-timeout investigation, gated off by default. See
+// matching notes in lib/auth/auth.ts, lib/auth/auth.config.ts and
+// components/auth/login-form.tsx.
+const DEBUG_AUTH_TIMING = process.env.DEBUG_AUTH_TIMING === "true";
+
 /** Logs in through the real login form (not the API directly). */
 export async function login(page: Page, loginId: string, password = PASSWORD) {
+  if (DEBUG_AUTH_TIMING) {
+    // Forward the browser's own [AUTH_TIMING] client-side logs into the
+    // Node/CI output so both halves land in the same log stream.
+    page.on("console", (msg) => {
+      if (msg.text().includes("[AUTH_TIMING]")) console.log(msg.text());
+    });
+  }
+
   await page.goto("/login");
   await page.getByLabel(/enrollment number|email/i).fill(loginId);
   await page.getByLabel(/^password/i).fill(password);
+
+  const t0 = DEBUG_AUTH_TIMING ? performance.now() : 0;
   await page.getByRole("button", { name: /sign in|log ?in/i }).click();
-  // waitUntil: "commit" — the post-login redirect is a client-side
-  // router.push (see login-form.tsx), not a full page navigation, so no
-  // browser `load` event necessarily follows it. Waiting on the default
-  // "load" lifecycle state races against that and intermittently times out
-  // (seen repeatedly in CI: `waiting for navigation until "load"`), even
-  // though the URL itself has already changed correctly.
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
-    timeout: 15_000,
-    waitUntil: "commit",
-  });
+  try {
+    // waitUntil: "commit" — the post-login redirect is a client-side
+    // router.push (see login-form.tsx), not a full page navigation, so no
+    // browser `load` event necessarily follows it. Waiting on the default
+    // "load" lifecycle state races against that and intermittently times out
+    // (seen repeatedly in CI: `waiting for navigation until "load"`), even
+    // though the URL itself has already changed correctly.
+    await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+      timeout: 15_000,
+      waitUntil: "commit",
+    });
+  } finally {
+    if (DEBUG_AUTH_TIMING) {
+      console.log(`[AUTH_TIMING] click-to-redirect (login: ${loginId}): ${(performance.now() - t0).toFixed(1)}ms`);
+    }
+  }
 }
 
 /** Collects console errors and page errors during a page's lifetime. */

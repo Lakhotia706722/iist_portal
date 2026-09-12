@@ -14,6 +14,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
+        // TEMPORARY — CI login-timeout investigation. Gated off by default;
+        // set DEBUG_AUTH_TIMING=true to enable. Remove once the bottleneck
+        // behind the intermittent CI `waitForURL` timeouts is confirmed fixed.
+        const debugTiming = process.env.DEBUG_AUTH_TIMING === "true";
+        const t0 = debugTiming ? performance.now() : 0;
+
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
@@ -38,10 +44,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             },
           },
         });
+        const tLookup = debugTiming ? performance.now() : 0;
+        if (debugTiming) console.log(`[AUTH_TIMING] user lookup: ${(tLookup - t0).toFixed(1)}ms`);
 
         if (!user) return null;
 
         const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+        const tBcrypt = debugTiming ? performance.now() : 0;
+        if (debugTiming) console.log(`[AUTH_TIMING] bcrypt.compare: ${(tBcrypt - tLookup).toFixed(1)}ms`);
         if (!passwordMatch) return null;
 
         // Update lastLoginAt
@@ -49,6 +59,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
         });
+        const tUpdate = debugTiming ? performance.now() : 0;
+        if (debugTiming) {
+          console.log(`[AUTH_TIMING] lastLoginAt update: ${(tUpdate - tBcrypt).toFixed(1)}ms`);
+          console.log(`[AUTH_TIMING] authorize() total: ${(tUpdate - t0).toFixed(1)}ms`);
+        }
 
         return {
           id: user.id,

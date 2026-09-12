@@ -23,19 +23,31 @@ export function LoginForm() {
 
   async function onSubmit(data: LoginInput) {
     setServerError("");
+    // TEMPORARY — CI login-timeout investigation, gated off by default.
+    // See matching notes in lib/auth/auth.ts and lib/auth/auth.config.ts.
+    const debugTiming = process.env.NEXT_PUBLIC_DEBUG_AUTH_TIMING === "true";
+    const t0 = debugTiming ? performance.now() : 0;
+
     const result = await signIn("credentials", {
       enrollmentNumber: data.enrollmentNumber,
       password: data.password,
       redirect: false,
     });
+    if (debugTiming) {
+      console.log(`[AUTH_TIMING] client: signIn() round-trip: ${(performance.now() - t0).toFixed(1)}ms`);
+    }
 
     if (result?.error) {
       setServerError("Invalid credentials. Please check your enrollment number and password.");
       return;
     }
 
+    const t1 = debugTiming ? performance.now() : 0;
     router.push(callbackUrl);
     router.refresh();
+    if (debugTiming) {
+      console.log(`[AUTH_TIMING] client: router.push+refresh issued at +${(t1 - t0).toFixed(1)}ms`);
+    }
   }
 
   return (
