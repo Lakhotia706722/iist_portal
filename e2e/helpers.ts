@@ -19,7 +19,16 @@ export async function login(page: Page, loginId: string, password = PASSWORD) {
   await page.getByLabel(/enrollment number|email/i).fill(loginId);
   await page.getByLabel(/^password/i).fill(password);
   await page.getByRole("button", { name: /sign in|log ?in/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 15_000 });
+  // waitUntil: "commit" — the post-login redirect is a client-side
+  // router.push (see login-form.tsx), not a full page navigation, so no
+  // browser `load` event necessarily follows it. Waiting on the default
+  // "load" lifecycle state races against that and intermittently times out
+  // (seen repeatedly in CI: `waiting for navigation until "load"`), even
+  // though the URL itself has already changed correctly.
+  await page.waitForURL((url) => !url.pathname.startsWith("/login"), {
+    timeout: 15_000,
+    waitUntil: "commit",
+  });
 }
 
 /** Collects console errors and page errors during a page's lifetime. */

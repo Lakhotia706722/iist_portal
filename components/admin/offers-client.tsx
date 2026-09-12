@@ -322,18 +322,6 @@ export function OffersClient() {
           icon={<Award className="h-10 w-10" />}
           title="No offers recorded"
           description="Offers appear here once an application is marked Selected and an offer is recorded against it."
-          action={
-            <Button
-              onClick={() => {
-                setForm(EMPTY_FORM);
-                setFormError(null);
-                setCreateOpen(true);
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Record offer
-            </Button>
-          }
         />
       ) : (
         <Card>

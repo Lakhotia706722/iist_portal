@@ -17,7 +17,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  reporter: [["list"]],
+  reporter: process.env.CI
+    ? [["list"], ["github"], ["html", { open: "never", outputFolder: "playwright-report" }]]
+    : [["list"]],
   timeout: 30_000,
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:4242",
