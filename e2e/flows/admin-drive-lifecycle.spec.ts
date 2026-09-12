@@ -176,7 +176,14 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   await prisma.application.update({ where: { id: application.id }, data: { status: "SELECTED" } });
 
   await page.goto("/admin/offers");
-  await page.getByRole("button", { name: /record offer/i }).click();
+  // On a genuinely fresh database (no offers recorded yet at all — the
+  // real state of a brand-new CI run, never observed on a long-lived dev
+  // DB accumulating fixtures) the page's EmptyState renders its own
+  // "Record offer" action button alongside the toolbar's, so the two
+  // share an accessible name — same pattern as certifications/
+  // achievements elsewhere in this suite. `.first()` (the toolbar one) is
+  // always present regardless of whether the list is empty.
+  await page.getByRole("button", { name: /record offer/i }).first().click();
   await expect(page.getByText(/record an offer/i)).toBeVisible({ timeout: 10_000 });
   // Real native <select>/<input> elements with proper labels — selectOption
   // by visible text (not a Radix combobox despite offer.getByRole('combobox')
