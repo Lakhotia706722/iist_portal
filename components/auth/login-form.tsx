@@ -28,11 +28,23 @@ export function LoginForm() {
     const debugTiming = process.env.NEXT_PUBLIC_DEBUG_AUTH_TIMING === "true";
     const t0 = debugTiming ? performance.now() : 0;
 
-    const result = await signIn("credentials", {
-      enrollmentNumber: data.enrollmentNumber,
-      password: data.password,
-      redirect: false,
-    });
+    let result: Awaited<ReturnType<typeof signIn>>;
+    try {
+      result = await signIn("credentials", {
+        enrollmentNumber: data.enrollmentNumber,
+        password: data.password,
+        redirect: false,
+      });
+    } catch {
+      // next-auth's signIn() throws (rather than resolving with
+      // result.error) on a response it doesn't recognize as its own — e.g.
+      // this app's rate-limiter returning a plain 429 JSON body ahead of
+      // NextAuth ever seeing the request. Without this catch, that left the
+      // form stuck showing "Sign In" forever with no feedback and no
+      // navigation — indistinguishable from a hang.
+      setServerError("Too many attempts. Please wait a minute and try again.");
+      return;
+    }
     if (debugTiming) {
       console.log(`[AUTH_TIMING] client: signIn() round-trip: ${(performance.now() - t0).toFixed(1)}ms`);
     }

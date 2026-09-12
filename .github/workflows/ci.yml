@@ -12,11 +12,6 @@ env:
   LOCAL_STORAGE_PATH: "./uploads"
   NEXT_PUBLIC_APP_URL: "http://localhost:4242"
   E2E_BASE_URL: "http://localhost:4242"
-  # TEMPORARY — investigating intermittent e2e login-timeout failures.
-  # Turns on [AUTH_TIMING] logging in lib/auth/*, the login form, and the
-  # e2e login() helper. Remove once the bottleneck is found and fixed.
-  DEBUG_AUTH_TIMING: "true"
-  NEXT_PUBLIC_DEBUG_AUTH_TIMING: "true"
 
 jobs:
   # Fast, DB-free checks — typecheck, lint, and the two Phase 12 standing
@@ -69,21 +64,21 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run build
       - name: Start app (background)
-        # TEMPORARY: redirected to a file instead of inheriting this step's
-        # stdout — once this step ends, GitHub Actions' log capture for it
-        # goes away too, so the backgrounded server's *runtime* request logs
-        # (as opposed to its startup banner, printed while this step was
-        # still active) were never actually reaching the job log at all.
+        # Redirected to a file rather than left attached to this step's own
+        # stdout — a backgrounded process's output otherwise stops being
+        # captured once the step that launched it ends (only its startup
+        # banner, printed while the step was still active, ever showed up
+        # in the job log; every runtime request log was silently lost).
+        # Keeping the redirect + the on-failure artifact below permanently,
+        # the same way playwright-report is kept, since it's what let us
+        # actually diagnose the login-timeout root cause below.
         run: npx next start -p 4242 > server.log 2>&1 &
       - name: Wait for app to come up
         run: npx wait-on http://localhost:4242/login --timeout 60000
       - run: npx tsx e2e/seed-e2e.ts
       - run: npx playwright test
-      - name: Print server log
-        if: always()
-        run: cat server.log || true
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: server-log
           path: server.log
