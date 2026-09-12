@@ -69,11 +69,25 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run build
       - name: Start app (background)
-        run: npx next start -p 4242 &
+        # TEMPORARY: redirected to a file instead of inheriting this step's
+        # stdout — once this step ends, GitHub Actions' log capture for it
+        # goes away too, so the backgrounded server's *runtime* request logs
+        # (as opposed to its startup banner, printed while this step was
+        # still active) were never actually reaching the job log at all.
+        run: npx next start -p 4242 > server.log 2>&1 &
       - name: Wait for app to come up
         run: npx wait-on http://localhost:4242/login --timeout 60000
       - run: npx tsx e2e/seed-e2e.ts
       - run: npx playwright test
+      - name: Print server log
+        if: always()
+        run: cat server.log || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: server-log
+          path: server.log
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

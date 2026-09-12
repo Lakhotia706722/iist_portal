@@ -69,6 +69,13 @@ export interface RateLimitResult {
 
 export function checkRateLimit(request: NextRequest, options: RateLimitOptions): RateLimitResult {
   const ip = clientIp(request);
+  // TEMPORARY — CI login-timeout investigation. See lib/auth/auth.ts.
+  if (process.env.DEBUG_AUTH_TIMING === "true" && options.bucket === "auth") {
+    const existing = ip !== null ? store.get(`${options.bucket}:${ip}`) : undefined;
+    console.log(
+      `[AUTH_TIMING] rate-limit check: bucket=${options.bucket} ip=${ip} priorCount=${existing?.count ?? 0}`
+    );
+  }
   if (ip === null) {
     // Phase 10: this used to key on the literal string "unknown" here,
     // which meant every client sharing that fallback — every request in
