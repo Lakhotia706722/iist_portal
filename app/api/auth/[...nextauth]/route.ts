@@ -11,7 +11,7 @@ export const { GET } = handlers;
  * meaningfully slowing a credential-stuffing attempt.
  */
 export async function POST(request: NextRequest) {
-  const result = checkRateLimit(request, { bucket: "auth", limit: 10, windowMs: 60_000 });
+  const result = await checkRateLimit(request, { bucket: "auth", limit: 10, windowMs: 60_000 });
   if (!result.allowed) return rateLimitedResponse(result);
   return handlers.POST(request);
 }

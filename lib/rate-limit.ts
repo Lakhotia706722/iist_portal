@@ -1,29 +1,28 @@
 /**
- * Rate limiting — Phase 5
+ * Rate limiting — Phase 5, replaced with a distributed backend in Phase 16.
  *
- * In-memory fixed-window limiter keyed by (bucket, client identifier). This
- * is adequate for a single-instance deployment; a multi-instance deployment
- * needs a shared store (Redis, etc.) — swap `store` for one keyed the same
- * way if this app is ever horizontally scaled.
+ * Phase 5's limiter was a module-level in-memory Map — correct on a single
+ * long-lived process, but silently ineffective on Vercel: every serverless
+ * function instance gets its own memory, so "10 requests per minute" really
+ * meant "10 requests per minute *per instance*", and real concurrent load
+ * spins up many instances. A client hitting different instances (or just
+ * getting unlucky with which one handles each request) could blow past the
+ * intended limit by a large multiple without ever seeing a 429.
+ *
+ * Phase 16 — P2: Upstash Redis (`@upstash/ratelimit` + `@upstash/redis`) is
+ * the shared, HTTP-based store every instance talks to, so the limit is now
+ * enforced against the same counter regardless of which instance a request
+ * lands on. It activates automatically when UPSTASH_REDIS_REST_URL and
+ * UPSTASH_REDIS_REST_TOKEN are set; without them (local dev, or before
+ * those credentials are provisioned) this falls back to the original
+ * in-memory limiter — correct for local dev, but NOT distributed, and a
+ * console warning says so once per process so this is never silently
+ * relied on in a real multi-instance deployment.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
-
-const store = new Map<string, Bucket>();
-
-// Periodically drop expired buckets so this doesn't grow unbounded over a
-// long-running process.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of store) {
-    if (bucket.resetAt <= now) store.delete(key);
-  }
-}, 60_000).unref?.();
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 export interface RateLimitOptions {
   /** Distinguishes this limiter from others sharing the module-level store. */
@@ -33,6 +32,96 @@ export interface RateLimitOptions {
   /** Window length in milliseconds. */
   windowMs: number;
 }
+
+export interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  resetAt: number;
+}
+
+// ─── Distributed backend (Upstash Redis) ──────────────────────────────────────
+
+const UPSTASH_CONFIGURED = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+
+let redis: Redis | null = null;
+// One Ratelimit instance per (bucket, limit, windowMs) triple — each needs
+// its own sliding window, and constructing it is cheap, so cache by a key
+// derived from the options rather than re-building per request.
+const limiters = new Map<string, Ratelimit>();
+
+function getLimiter(options: RateLimitOptions): Ratelimit {
+  const cacheKey = `${options.bucket}:${options.limit}:${options.windowMs}`;
+  let limiter = limiters.get(cacheKey);
+  if (limiter) return limiter;
+
+  if (!redis) redis = Redis.fromEnv();
+  limiter = new Ratelimit({
+    redis,
+    // Sliding window, not fixed — avoids the fixed-window edge case where a
+    // client can burst up to 2x the limit right across a window boundary.
+    limiter: Ratelimit.slidingWindow(options.limit, `${options.windowMs} ms`),
+    prefix: `ratelimit:${options.bucket}`,
+    analytics: false,
+  });
+  limiters.set(cacheKey, limiter);
+  return limiter;
+}
+
+async function checkRateLimitDistributed(clientId: string, options: RateLimitOptions): Promise<RateLimitResult> {
+  const limiter = getLimiter(options);
+  const result = await limiter.limit(clientId);
+  return { allowed: result.success, remaining: result.remaining, resetAt: result.reset };
+}
+
+// ─── In-memory fallback (Phase 5 — local dev / no Upstash configured) ─────────
+
+interface Bucket {
+  count: number;
+  resetAt: number;
+}
+
+const memoryStore = new Map<string, Bucket>();
+
+// Periodically drop expired buckets so this doesn't grow unbounded over a
+// long-running process.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, bucket] of memoryStore) {
+    if (bucket.resetAt <= now) memoryStore.delete(key);
+  }
+}, 60_000).unref?.();
+
+let warnedNotDistributed = false;
+
+function checkRateLimitInMemory(clientId: string, options: RateLimitOptions): RateLimitResult {
+  if (!warnedNotDistributed) {
+    warnedNotDistributed = true;
+    console.warn(
+      "[rate-limit] UPSTASH_REDIS_REST_URL/UPSTASH_REDIS_REST_TOKEN not set — using the in-memory fallback " +
+        "limiter. This is fine for local dev, but on a multi-instance deployment (Vercel serverless) it does " +
+        "NOT enforce a shared limit across instances. Set both env vars before going to production."
+    );
+  }
+
+  const key = `${options.bucket}:${clientId}`;
+  const now = Date.now();
+  const existing = memoryStore.get(key);
+
+  if (!existing || existing.resetAt <= now) {
+    const resetAt = now + options.windowMs;
+    memoryStore.set(key, { count: 1, resetAt });
+    return { allowed: true, remaining: options.limit - 1, resetAt };
+  }
+
+  if (existing.count >= options.limit) {
+    return { allowed: false, remaining: 0, resetAt: existing.resetAt };
+  }
+
+  existing.count++;
+  return { allowed: true, remaining: options.limit - existing.count, resetAt: existing.resetAt };
+}
+
+// ─── Client identification (shared by both backends) ──────────────────────────
 
 function clientIp(request: NextRequest): string | null {
   const header =
@@ -61,13 +150,33 @@ function clientIp(request: NextRequest): string | null {
   return null;
 }
 
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
+/**
+ * Check (and consume, if allowed) one request against a rate limit bucket,
+ * keyed by an explicit identity rather than IP/cookie — use this for any
+ * authenticated per-user limit (e.g. "N AI generations per student per
+ * day"), where the acting user's real id is a correct, stable key and IP
+ * is not (multiple students behind the same NAT share an IP; one student
+ * switching networks would otherwise dodge their own limit).
+ */
+export async function checkRateLimitForKey(clientId: string, options: RateLimitOptions): Promise<RateLimitResult> {
+  if (UPSTASH_CONFIGURED) {
+    try {
+      return await checkRateLimitDistributed(clientId, options);
+    } catch (err) {
+      console.error(`[rate-limit] Upstash request failed for bucket "${options.bucket}" — failing open:`, err);
+      return { allowed: true, remaining: options.limit, resetAt: Date.now() + options.windowMs };
+    }
+  }
+  return checkRateLimitInMemory(clientId, options);
 }
 
-export function checkRateLimit(request: NextRequest, options: RateLimitOptions): RateLimitResult {
+/**
+ * Check (and consume, if allowed) one request against a rate limit bucket,
+ * keyed by client IP (falling back to a session cookie — see clientIp()).
+ * Use this for anonymous/pre-auth endpoints (login, password reset) where
+ * there is no user id yet to key on.
+ */
+export async function checkRateLimit(request: NextRequest, options: RateLimitOptions): Promise<RateLimitResult> {
   const ip = clientIp(request);
   if (ip === null) {
     // Phase 10: this used to key on the literal string "unknown" here,
@@ -89,22 +198,7 @@ export function checkRateLimit(request: NextRequest, options: RateLimitOptions):
     return { allowed: true, remaining: options.limit, resetAt: Date.now() + options.windowMs };
   }
 
-  const key = `${options.bucket}:${ip}`;
-  const now = Date.now();
-  const existing = store.get(key);
-
-  if (!existing || existing.resetAt <= now) {
-    const resetAt = now + options.windowMs;
-    store.set(key, { count: 1, resetAt });
-    return { allowed: true, remaining: options.limit - 1, resetAt };
-  }
-
-  if (existing.count >= options.limit) {
-    return { allowed: false, remaining: 0, resetAt: existing.resetAt };
-  }
-
-  existing.count++;
-  return { allowed: true, remaining: options.limit - existing.count, resetAt: existing.resetAt };
+  return checkRateLimitForKey(ip, options);
 }
 
 /** 429 response with standard rate-limit headers. */
@@ -133,8 +227,16 @@ export function withRateLimit<H extends (req: NextRequest, ...args: any[]) => Pr
   handler: H
 ): H {
   return (async (req: NextRequest, ...args: any[]) => {
-    const result = checkRateLimit(req, options);
+    const result = await checkRateLimit(req, options);
     if (!result.allowed) return rateLimitedResponse(result);
     return handler(req, ...args);
   }) as H;
+}
+
+/** Test/verification seam — drop cached limiter instances (e.g. after changing env). */
+export function resetRateLimiters(): void {
+  redis = null;
+  limiters.clear();
+  memoryStore.clear();
+  warnedNotDistributed = false;
 }

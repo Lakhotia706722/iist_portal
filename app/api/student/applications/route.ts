@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const limit = checkRateLimit(request, { bucket: "apply", limit: 20, windowMs: 60_000 });
+  const limit = await checkRateLimit(request, { bucket: "apply", limit: 20, windowMs: 60_000 });
   if (!limit.allowed) return rateLimitedResponse(limit);
 
   try {

@@ -6,7 +6,7 @@ import { writeAuditLog } from "@/server/services/audit.service";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
-  const limit = checkRateLimit(req, { bucket: "reset-password", limit: 10, windowMs: 60_000 });
+  const limit = await checkRateLimit(req, { bucket: "reset-password", limit: 10, windowMs: 60_000 });
   if (!limit.allowed) return rateLimitedResponse(limit);
 
   try {

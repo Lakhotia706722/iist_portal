@@ -8,7 +8,7 @@ import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
-  const limit = checkRateLimit(req, { bucket: "forgot-password", limit: 5, windowMs: 60_000 });
+  const limit = await checkRateLimit(req, { bucket: "forgot-password", limit: 5, windowMs: 60_000 });
   if (!limit.allowed) return rateLimitedResponse(limit);
 
   try {
