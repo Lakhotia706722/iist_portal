@@ -92,7 +92,7 @@ Pulled from `ARCHITECTURE.md` (§13–15) — each with its trigger for revisiti
 | **`nodemailer`'s remaining `raw`-MIME advisory** | Every `sendMail()` call site in this codebase uses `{from, to, subject, html, text, replyTo}` — the vulnerable `raw` option is never used. | Before adding any feature that needs raw MIME construction. |
 | **Next.js 14→16 major-version cluster** (`next`, `eslint-config-next`, `@next/eslint-plugin-next`, `glob`) — includes 2 critical CVEs surfaced in a later audit | A major Next.js bump needs a dedicated regression pass (App Router, middleware API, Auth.js v5 beta integration all need re-verification). One of the two critical CVEs (`GHSA-p293-qw3h-jr36`, Windows-hosted RCE) doesn't apply to this deployment (Vercel/Linux). The other (`GHSA-2xp9-vwfh-vxw4`, AVIF Image-Optimizer RCE) **was mitigated directly** — every `next/image` usage that renders a user/admin-uploaded image now sets `unoptimized`, closing the exploit path without needing the version bump. | Next scheduled maintenance window, or immediately if a CVE in this cluster is shown exploitable against a code path this app actually uses. |
 | **`validateFileUpload()` trusts the client-declared MIME type**, not actual file bytes | Direct cause of the AVIF RCE exposure above; the `unoptimized` fix closes the *rendering* path, but a mislabeled file can still be stored. | Add real magic-byte validation (e.g. the `file-type` package) at upload time — flagged as a recommended follow-up, not yet implemented. |
-| **Rate limiting is in-memory, per-process** (`lib/rate-limit.ts`) | Simple, correct for a single instance; the `checkRateLimit()` signature is designed so swapping in Redis later doesn't require call-site changes. | Before deploying more than one Next.js server process. |
+| ~~**Rate limiting is in-memory, per-process**~~ — **RESOLVED, Phase 16** | `lib/rate-limit.ts` is now Upstash Redis-backed (`@upstash/ratelimit` + `@upstash/redis`, sliding window) when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set — enforced consistently across every serverless instance. Falls back to the original in-memory behavior (with a console warning) when unset, so local dev needs nothing extra. **Still blocking real production use** until those two env vars are actually set — see §7. | N/A — closed. Revisit only if the fallback path is ever observed active in production (the warning log is the tripwire). |
 | **`/hod/analytics` and `/hod/audit-logs` stay institute-wide**, not department-scoped (Phase 7) | Both only surface aggregate figures or cross-cutting operational history — never individual student PII (that's what the new, properly department-scoped `/hod/dashboard`, `/hod/students`, `/hod/compliance` are for). `AuditLog` rows aren't cleanly department-partitionable in the first place. | If `/hod/analytics`'s department-breakdown table is ever extended to show individual student rows. |
 | **Company reps get read access to their drive's Pre-Placement Talk info** (Phase 7) | A rep naturally wants to see what's been shared about their own drive. Authorship (create/edit) stays admin-only — reps never hold `drive:write`. | N/A — this is a settled, not deferred, decision. |
 
@@ -132,3 +132,216 @@ Auth.js/Prisma's own implicit env resolution.
 
 `.env.example` is otherwise complete and accurate — every variable the app
 actually reads is documented there with guidance on what production needs.
+
+Phase 16 additions:
+
+| Variable | Required for | Status |
+|---|---|---|
+| `DIRECT_URL` | Prisma migrations against a pooled `DATABASE_URL` (§7.1) | Set locally (same as `DATABASE_URL` — no pooler to speak of yet); **must** be the unpooled connection string once a real Neon/Supabase project exists |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Distributed rate limiting (§7.2) | Unset — in-memory fallback active |
+| `QSTASH_TOKEN` / `QSTASH_CURRENT_SIGNING_KEY` / `QSTASH_NEXT_SIGNING_KEY` | Background job queue for notification emails (§7.4) | Unset — synchronous inline-send fallback active |
+| `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | Error tracking (§7.7) | Unset — `Sentry.init({enabled:false})`, a documented no-op |
+| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | Sentry source-map upload at build time | Unset — build-time upload step skipped, builds unaffected |
+
+---
+
+## 7. Phase 16 — Production readiness at scale (1000+ concurrent users)
+
+Everything in this section is **code-complete and verified against local
+Postgres/local storage** (this project had no production infrastructure at
+all before this phase — see the credential-gap note at the top of each
+subsection). Nothing here is "confirmed live in production" — that requires
+whoever provisions the real accounts below to set the env vars and re-run
+the verification each subsection names.
+
+### 7.1 Database: pooled connections + indexes
+
+- `prisma/schema.prisma`'s datasource block now has both `url` (must be the
+  **pooled** connection string in production — Neon's `-pooler` host, or
+  Supabase's pooler port 6543 with `pgbouncer=true`) and `directUrl` (the
+  **unpooled** connection, used only by `prisma migrate`).
+- **`connection_limit` sizing**: set it on the pooled `DATABASE_URL` as a
+  query param (`?connection_limit=N`). `N` should be *(your Postgres plan's
+  max connections) / (expected peak concurrent serverless function
+  instances)*. Neon's free/Launch tiers cap around 100–300 connections
+  depending on compute size; Vercel can genuinely run many dozens of
+  concurrent function instances under real load. A conservative starting
+  point once real numbers are known: `connection_limit=5` per instance,
+  reviewed against the actual plan's cap and actual peak concurrency
+  observed in the k6 run (§7.8) once staging exists on real infra.
+- New migration `20260912053359_phase16_capacity_indexes` (applied and
+  verified against local Postgres): `Application(driveId, status)`,
+  `AcademicRecord(currentCgpa)`, `Student(branchId, batchId)`,
+  `AuditLog(entity, createdAt)`, plus `pg_trgm` + GIN trigram indexes on
+  every column the global search does substring matching against
+  (`Student.enrollmentNumber/firstName/lastName`, `Company.name`,
+  `JobRole.title`, `PlacementDrive.title`).
+- N+1 audit: fixed two real ones in `analytics.service.ts`
+  (`listCompanySummaries`, `getDepartmentBreakdown` — both now single
+  `groupBy` queries instead of one query per company/department).
+  `drive-dashboard.service.ts`'s industry-benchmark drill-down has a
+  similar but bounded (capped at 50, infrequent) pattern — flagged, not
+  fixed this phase.
+
+### 7.2 Distributed rate limiting
+
+`lib/rate-limit.ts` — Upstash Redis-backed (`@upstash/ratelimit`, sliding
+window) when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set;
+falls back to the original in-memory limiter (console warning) otherwise.
+Same buckets as before (login, forgot/reset/change-password,
+application-submit) plus two new ones added this phase: AI generation
+(`ai-burst` 6/min + `ai-daily` 20/day per student, §7.6) and report
+generation (10/min per admin). Verified end to end via a real
+Playwright run: hammering the report-generation endpoint past its cap
+returns 429 (confirmed with the in-memory fallback, since no real
+Upstash credentials exist this session — get them at
+https://console.upstash.com/redis, free tier is enough to start).
+
+### 7.3 Polling load at scale
+
+Estimate: 1000 concurrent active sessions × (~1 main "live" query at 15s +
+the notification bell) ≈ 11,500 requests/minute (~190 req/s) sustained
+from polling alone, before any real user action — the notification bell
+alone was roughly two-thirds of that, and re-serialized up to 15 full
+notification rows every poll regardless of whether anything changed.
+Fixed with a cheap "has anything changed" short-circuit (new
+`GET /api/notifications/peek` — one indexed count + one indexed
+single-row lookup, no notification bodies) that the bell now polls on its
+8s interval; the expensive full list fetch only fires when something
+actually changed. Verified this doesn't regress Phase 15's fast-path
+proof (`realtime-propagation.spec.ts`, 6/6 passing). The same
+version-check pattern is designed to extend to the other "live" queries
+(student-applications, drive-shortlist, etc.) but wasn't built out for
+all of them this phase — dashboard aggregate polls (Command Center,
+HOD/faculty/company) were reviewed and left at 20s, since that population
+is admin/faculty-sized (tens of users), not 1000+.
+
+### 7.4 Background jobs
+
+The brief's original plan was Next.js `after()` for single-recipient
+sends and Upstash QStash for bulk. **`after()` does not exist in any
+stable Next.js 14.x release** (only 14.3.0-canary builds have it —
+confirmed by checking the installed 14.2.35's actual exports; it
+stabilized only in Next 15). Upgrading Next's major version is a real,
+separate risk this phase should not take on as a side effect of one
+sub-item, so every notification email (single-recipient or bulk) now
+goes through one mechanism: `lib/queue/qstash.ts` + a signature-verified
+`/api/jobs/send-email` callback route. Bulk sends use `batchJSON` (one
+QStash API call for the whole batch, not one per recipient — verified
+with a unit test asserting exactly one `batchJSON` call for 300
+recipients). Falls back to the original synchronous inline send when
+`QSTASH_TOKEN` is unset. Get QStash credentials at
+https://console.upstash.com/qstash.
+
+### 7.5 Direct-to-storage uploads
+
+New `StorageAdapter.getPresignedUploadUrl()` (real presigned PUT for
+R2/S3; a small signed dev-only route for the local driver) +
+`lib/uploads/presign.ts` (per-category auth + type/size validation,
+before any URL is issued) + `hooks/use-direct-upload.ts` (client-side
+3-step helper). **Migrated and verified end to end** (real UI or
+API-level presign→PUT→confirm, DB-verified): resumes, documents,
+certifications, achievements, internships, projects, videos,
+offer-letters, incident-evidence, ppt-attachments — 10 of the 11 named
+categories. **Not migrated this phase**: company logos — its upload is
+part of one multipart submission covering the entire company
+create/update form, not an isolated file field; migrating it means
+converting that whole form to JSON, not just the upload mechanism. Left
+on the old path deliberately: it's a rare admin action with a 2MB cap,
+nowhere near Vercel's body-size limit even unmigrated. Flagged for a
+follow-up phase.
+
+### 7.6 AI resource governance
+
+`lib/ai/usage.ts`: per-student burst (6/min) + daily (20/day) caps via
+the same Upstash-backed limiter as §7.2, enforced before every AI call.
+`lib/ai/anthropic-provider.ts` catches `Anthropic.RateLimitError` (after
+the SDK's own built-in retry/backoff is exhausted) and surfaces a clean
+"try again in a moment" message instead of a raw SDK error. Every
+successful call logs input/output tokens + a rough cost estimate (fixed
+$/million-token constants documented next to where they're used — not
+billing-accurate, just visible) to a new `AiUsageLog` table, readable via
+`GET /api/admin/ai-usage` (per-day aggregates, last N days).
+
+### 7.7 Observability
+
+- Sentry (`@sentry/nextjs`) wired for client (`instrumentation-client.ts`),
+  server, and edge (`instrumentation.ts` + `sentry.server.config.ts` /
+  `sentry.edge.config.ts`) runtimes, plus a new `app/global-error.tsx`
+  (the app had no top-level React error boundary at all before this).
+  `requireAuth()` (the one choke point nearly every route passes through)
+  tags the acting user/role on the current Sentry scope; `handleApiError`
+  and `errorResponse` capture genuinely unexpected errors (not routine
+  4xx business-logic responses) via `Sentry.captureException`. All of
+  this runs as a documented no-op without `SENTRY_DSN` set — confirmed via
+  a real captured test error (both a standalone script and a real in-app
+  route through `handleApiError`) producing a well-formed, non-empty
+  Sentry event id, proving the full capture pipeline runs correctly; no
+  live Sentry project exists this session to view the event in an actual
+  dashboard. Get a DSN at https://sentry.io (org + project), and an org
+  auth token only if source-map upload at build time is wanted.
+- `GET /api/health` — no auth required (added to a small public-route
+  allowlist in `middleware.ts`, which otherwise redirects every
+  unauthenticated request to `/login`, API routes included). Checks DB
+  (`SELECT 1`) and storage (`exists()` on a near-certainly-absent key)
+  reachability. **Recommendation, not implemented**: point a free
+  UptimeRobot (or similar) HTTP(s) monitor at this endpoint once deployed,
+  checking every 1–5 minutes, alerting on a non-200 or on the `"status":
+  "degraded"` body.
+
+### 7.8 Load testing (k6)
+
+*(Filled in after the k6 run — see the dedicated results below this
+line once P8 completes.)*
+
+### 7.9 Backup and disaster recovery
+
+**No production Postgres instance exists yet** — this section documents
+the required steps and confirmation checklist for whoever provisions one
+(Neon or Supabase), not a confirmation that PITR is already on (there is
+nothing to check it against yet).
+
+**Before go-live, whoever provisions the production database must:**
+
+1. **Confirm point-in-time recovery is actually enabled**, not assumed:
+   - **Neon**: PITR is on by default on all plans, with a retention window
+     that varies by plan (Free: 24 hours; paid plans: up to 30 days,
+     configurable). Confirm the actual retention window in the Neon
+     console under Project → Settings → Backup/Restore, and make sure
+     it's long enough to catch a bad deploy discovered a day or two later,
+     not just the same day.
+   - **Supabase**: PITR is **not on by default** on lower tiers — it's a
+     paid add-on (Pro plan and above) that must be explicitly enabled
+     under Project Settings → Database → Backups. Confirm this has
+     actually been turned on, not just that a base plan was purchased.
+2. **Document the actual recovery procedure**, filled in with the real
+   project name/dashboard URL once that project exists:
+   - **Who has access**: list the specific people (by name, not just role)
+     who hold Neon/Supabase console admin access, and confirm at least two
+     people have it (a single point of failure at 2am is its own risk).
+   - **How to restore to a point in time** (Neon): Console → Project →
+     Branches → "Restore" (or create a new branch from a timestamp) →
+     pick the timestamp just before the bad event → this creates a new
+     branch/instance at that state, which is then pointed at by
+     `DATABASE_URL`/`DIRECT_URL` (or promoted) — Neon's PITR restores to a
+     **new branch**, not in-place, so the bad-state database is never
+     destroyed in the process (a safety net if the chosen timestamp turns
+     out to be wrong too).
+   - **How to restore to a point in time** (Supabase): Project Settings →
+     Database → Backups → Point in Time Recovery → pick the timestamp →
+     Supabase restores in-place after a confirmation step — **note that
+     Supabase's PITR restore is destructive to the current state**, so
+     take a manual snapshot/export first if there's any doubt.
+   - **After any restore**: re-run `npx prisma migrate deploy` if the
+     restored point predates a migration that's since been applied
+     forward, verify `GET /api/health` returns `"status":"ok"`, and spot-
+     check a handful of recent real records (not just row counts) before
+     declaring the incident resolved.
+   - **When to actually do this**: data corruption from a bad migration
+     or bad bulk operation, not routine "a student says their data is
+     wrong" (check the audit log first — nearly everything in this app is
+     audit-logged and individually reversible without a full restore).
+3. Add both of the above (the confirmation and the filled-in procedure)
+   as a permanent addition to this section once a real project exists —
+   this checklist item isn't done until the placeholder above is replaced
+   with real names, URLs, and a retention window number.

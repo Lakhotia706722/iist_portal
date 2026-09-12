@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   eslint: {
@@ -15,6 +17,9 @@ const nextConfig = {
       "@aws-sdk/client-s3",
       "@aws-sdk/s3-request-presigner",
     ],
+    // Phase 16 — P7: instrumentation.ts (Sentry's server/edge init hook)
+    // — still behind this flag on 14.2.35.
+    instrumentationHook: true,
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
@@ -37,4 +42,16 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Phase 16 — P7: uploads a source-map release to Sentry at build time —
+// only actually does anything (and only needs SENTRY_AUTH_TOKEN) when
+// SENTRY_DSN is set; harmless no-op wrapper otherwise, same as the config
+// files themselves.
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  // No source-map upload without an auth token — never fail a build over
+  // a missing optional credential.
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+});

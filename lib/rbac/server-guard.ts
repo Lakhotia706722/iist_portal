@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth/auth";
 import type { Permission } from "./index";
 import { hasPermission } from "./index";
+import * as Sentry from "@sentry/nextjs";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") { super(message); this.name = "UnauthorizedError"; }
@@ -9,9 +10,19 @@ export class ForbiddenError extends Error {
   constructor(message = "Forbidden") { super(message); this.name = "ForbiddenError"; }
 }
 
+/**
+ * Phase 16 — P7: this is the one choke point nearly every API route
+ * passes through before doing anything else — attaching the acting
+ * user/role to the current Sentry scope here means any later error in
+ * this same request (however it's eventually captured — see
+ * handleApiError in lib/api-utils.ts) carries real "who was this"
+ * context, without every route needing to do it individually.
+ */
 export async function requireAuth() {
   const session = await auth();
   if (!session?.user) throw new UnauthorizedError();
+  Sentry.setUser({ id: session.user.id as string });
+  Sentry.setTag("role", session.user.role as string);
   return session.user;
 }
 
@@ -48,5 +59,9 @@ export function errorResponse(error: unknown): Response {
       return Response.json({ error: error.message }, { status: 409 });
   }
   console.error(error);
+  // Phase 16 — P7: every named/routine case above already returned —
+  // this is genuinely unexpected. requireAuth() already tagged the
+  // acting user/role on the current Sentry scope for this request.
+  Sentry.captureException(error);
   return Response.json({ error: "Internal server error" }, { status: 500 });
 }

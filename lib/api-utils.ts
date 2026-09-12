@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
+import * as Sentry from "@sentry/nextjs";
 
 export class ApiError extends Error {
   constructor(
@@ -82,6 +83,13 @@ export function handleApiError(error: unknown): NextResponse {
         }, { status: 409 });
       
       default:
+        // Phase 16 — P7: the four codes above are routine, expected
+        // conditions the app already has a specific response for — this
+        // default case is a genuinely unexpected DB error, worth
+        // capturing. Sentry.setUser/setTag from requireAuth() (see
+        // lib/rbac/server-guard.ts) already tagged this request's acting
+        // user/role on the current scope before this ever ran.
+        Sentry.captureException(error);
         return NextResponse.json({
           error: "Database operation failed",
           code: error.code,
@@ -144,7 +152,9 @@ export function handleApiError(error: unknown): NextResponse {
     }
   }
 
-  // Generic server error
+  // Generic server error — genuinely unexpected (every named/routine case
+  // above already returned) — this is exactly what Sentry is for.
+  Sentry.captureException(error);
   return NextResponse.json({
     error: "Internal server error",
     code: "INTERNAL_ERROR",

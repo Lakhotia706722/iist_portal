@@ -15,6 +15,11 @@ const ROUTE_ROLES: Record<string, string[]> = {
 /** Pages that render without a session — no auth/role checks apply. */
 const PUBLIC_PAGES = ["/login", "/forgot-password", "/reset-password", "/unauthorized"];
 
+/** Phase 16 — P7.2: an uptime monitor has no session cookie — without
+ * this, every hit against /api/health would 307 to /login instead of
+ * running the actual health check. */
+const PUBLIC_API_ROUTES = ["/api/health"];
+
 /**
  * Phase 6: nonce-based CSP, generated fresh per request. Forwarded as an
  * `x-nonce` request header so Server Components can read it via
@@ -65,6 +70,11 @@ export default auth(function middleware(req: NextRequest & { auth: any }) {
   // Public auth pages: no session required, but they still get the same CSP.
   if (PUBLIC_PAGES.some((p) => pathname.startsWith(p))) {
     return withCsp(next(), nonce);
+  }
+
+  // Public API routes (health check) — no session, no CSP concerns (no HTML).
+  if (PUBLIC_API_ROUTES.some((p) => pathname.startsWith(p))) {
+    return next();
   }
 
   const session = (req as any).auth;
