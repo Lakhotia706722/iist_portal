@@ -8,6 +8,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStorageAdapter } from "@/lib/storage";
 
+// A GET route handler with no dynamic API usage is eligible for Next.js's
+// build-time static caching — confirmed the hard way: without this, a
+// production build served the SAME cached "ok" response (with the
+// timestamp frozen at server start) forever, never actually re-checking
+// DB/storage. A health check that can't detect an outage is worse than
+// no health check — it actively lies.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const checks: Record<string, "ok" | "error"> = {};
 

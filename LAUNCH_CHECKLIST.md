@@ -291,8 +291,116 @@ billing-accurate, just visible) to a new `AiUsageLog` table, readable via
 
 ### 7.8 Load testing (k6)
 
-*(Filled in after the k6 run — see the dedicated results below this
-line once P8 completes.)*
+`k6/load-test.js` — a realistic mix, not 1000 users doing the same thing
+at once: 70% student browse+apply (opportunities list, notification
+peek, ~1-in-4 real apply POST), 15% student tracking (applications list
++ notification peek), 10% admin (the 120-applicant shortlist queue on
+`scripts/seed-volume.ts`'s fixture drive, Command Center analytics, a
+report export), 5% staff dashboards (faculty/HOD/company rep, rotated).
+Every request carries a synthetic per-VU `X-Forwarded-For` header — see
+the script's own comment for why (k6 keeps one cookie jar per VU across
+every iteration regardless of which simulated student it logs in as,
+which would otherwise make the whole VU share one rate-limit identity;
+real users each have a distinct real IP, and Vercel does set
+`x-forwarded-for` correctly, so this header is this test's way of
+modeling that real-world distinctness).
+
+**Run against a production build (`next build && next start`), not
+`next dev`**, despite the URL still being `localhost:4242` — dev mode
+recompiles routes on demand and carries React/webpack dev overhead that
+would have measured compile latency, not real capacity. This is the one
+deliberate deviation from "run against local dev server": still fully
+local, no new infrastructure, just the right binary for a *load* test
+specifically.
+
+**A real, load-test-only environment constraint, stated plainly**: the
+k6 load generator and the app server being tested ran on the same single
+physical machine (16 logical cores), competing for the same CPU — unlike
+real production, where the load generator and Vercel's serverless
+function instances would run on entirely separate hardware, and unlike
+real production's horizontal auto-scaling (many parallel function
+instances), which this test's single Node.js server process cannot
+replicate at all. The numbers below are real and the *relative* findings
+are valid; the *absolute* latency figures are pessimistic compared to
+what real multi-instance serverless would show under the same request
+volume.
+
+**Run 1 — 1000 VUs** (2min ramp, 3min hold, 1min down):
+
+| Metric | Result |
+|---|---|
+| Checks passed | 93.5% (2883/3084) |
+| `http_req_duration` | avg 22.1s, p90 48.6s, **p95 54.1s** |
+| Shortlist queue (120 applicants) | avg 48.2s, p95 ~60s (worst offender — only 67% of checks passed) |
+| Report generation | avg 27.2s, p95 49.3s |
+| Login errors | 0% |
+| Throughput | 34.5 req/s sustained |
+| DB connections (`pg_stat_activity`) | 18 total / 1 active mid-run — bounded by Prisma's own client-side pool default, not by request volume (see below) |
+
+This run also caught a **real, separate bug**, found only because a
+production build was used: `GET /api/health` was being **statically
+cached by Next.js** (a GET route handler with no dynamic API usage is
+eligible for build-time caching unless told otherwise) — confirmed via
+its frozen timestamp and an `x-nextjs-cache: HIT` response header. A
+health check that can't detect an outage because it's serving a
+build-time snapshot forever is worse than no health check — it actively
+lies. **Fixed** with `export const dynamic = "force-dynamic"`; a stale
+cache entry from the first (unfixed) build survived one incremental
+rebuild, so a full clean rebuild (`rm -rf .next && next build`) was
+needed to actually clear it — confirmed after that by two calls a few
+seconds apart returning genuinely different timestamps and no
+`x-nextjs-cache` header.
+
+**Diagnosis**: `listShortlistableApplications()` (the shortlist query
+itself) takes **391ms in isolation**, not 48s — the query is not the
+problem. Tried raising Prisma's `connection_limit` from its default (33,
+`num_cpus*2+1` on this machine) to 50 and re-ran the same test at a more
+moderate 300 VUs for a clean before/after: **no meaningful difference**
+(p95 16.99s unpooled vs 14.86s at limit=50; shortlist/report averages
+within noise of each other). This rules out connection-pool size as the
+bottleneck here and confirms it's single-process CPU/event-loop
+throughput — many concurrent large-JSON-serializing/report-generating
+requests queuing on one Node.js process's main thread, sharing that
+one machine's CPU with k6 itself. This is exactly the failure mode
+Vercel's serverless auto-scaling (many parallel function instances,
+never one process handling everything) is designed to prevent, and
+exactly why P1's *actual* production concern (Postgres's own connection
+limit across *many simultaneous serverless instances*, not one
+process's client-side pool) is a different problem than what this
+single-machine test can reproduce.
+
+**Run 2 — 300 VUs** (1min ramp, 2min hold, 30s down), default pool:
+
+| Metric | Result |
+|---|---|
+| Checks passed | **100%** (1790/1790) — zero unexpected errors, only expected 403/409/429 outcomes under real concurrency |
+| `http_req_duration` | avg 6.59s, p90 14.1s, p95 17.0s |
+| Shortlist queue | avg 11.8s, p95 21.2s |
+| Report generation | avg 7.9s, p95 20.0s |
+| Login errors | 0% |
+| Throughput | 33.8 req/s sustained |
+
+Latency scales roughly with concurrency (300→1000 VUs is ~3.3x the load
+for ~2.5-4x the average latency on the heaviest endpoints) rather than
+collapsing catastrophically or non-linearly — a proportional, not
+pathological, degradation, consistent with the single-process-queuing
+diagnosis above rather than a broken query or a resource leak.
+
+**What this does and doesn't prove**: the app's actual logic held up
+completely (100% correctness at 300 VUs, 93.5% even at the punishing
+1000-VU/shared-CPU run, with every failure being a timeout, not a wrong
+answer or a crash) — real confidence in correctness under concurrency.
+It does **not** prove real production capacity at 1000 concurrent users,
+because Vercel's actual deployment model (many parallel serverless
+instances, real pooled Postgres via PgBouncer, a load generator on
+separate infrastructure from the app) is structurally different from one
+Node process sharing one machine's CPU with its own load generator.
+**Before treating 1000 concurrent users as validated for real launch**,
+re-run this exact k6 script (`k6/load-test.js`, unchanged) against a
+real staging deployment on Vercel once one exists, from a separate
+machine (a cloud CI runner or a k6 Cloud run, not the developer's own
+laptop) — that run is the one whose absolute latency numbers should
+actually be trusted.
 
 ### 7.9 Backup and disaster recovery
 
