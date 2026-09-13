@@ -76,6 +76,8 @@ jobs:
       - name: Wait for app to come up
         run: npx wait-on http://localhost:4242/login --timeout 60000
       - run: npx tsx e2e/seed-e2e.ts
+      - name: Seed volume dataset (data-volume.spec.ts's 120-applicant drive)
+        run: npx tsx scripts/seed-volume.ts
       - run: npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()

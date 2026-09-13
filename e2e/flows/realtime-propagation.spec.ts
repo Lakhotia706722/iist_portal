@@ -263,9 +263,18 @@ test("4b — Admin records an offer; Student's already-open Placement History sh
   const DRIVE_TITLE = `RT Offer Drive ${RUN}`;
   const ROLE_TITLE = "RT Offer Role";
   const COMPANY_NAME = `RT Offer Co ${RUN}`;
-  const studentName = await studentADisplayName();
 
-  const studentRow = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
+  // Student B, not the shared Student A used everywhere else in this file —
+  // admin-drive-lifecycle.spec.ts deliberately leaves Student A holding a
+  // completed "Offered" offer as its own final, lasting fixture state, and
+  // this app enforces a real "max active offers per student" policy
+  // (default 1). Recording a second offer against Student A here would
+  // always be rejected by that policy once that other test has run, no
+  // matter how correct the propagation itself is — this test's subject is
+  // realtime propagation, not policy limits, so it needs a student
+  // guaranteed not to already hold an offer.
+  const studentRow = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentB.id } });
+  const studentName = [studentRow.firstName, studentRow.lastName].filter(Boolean).join(" ") || studentRow.enrollmentNumber;
   const admin0 = await prisma.user.findUniqueOrThrow({ where: { email: ACCOUNTS.admin.email } });
   await prisma.company.deleteMany({ where: { name: COMPANY_NAME } });
   const company = await prisma.company.create({
@@ -275,14 +284,15 @@ test("4b — Admin records an offer; Student's already-open Placement History sh
     data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin0.id },
   });
   const jobRole = await prisma.jobRole.create({ data: { driveId: drive.id, title: ROLE_TITLE, ctcMin: 8, ctcMax: 10 } });
-  const resume = await prisma.resume.findFirstOrThrow({ where: { studentId: studentRow.id } });
+  const resume = await prisma.resume.findFirst({ where: { studentId: studentRow.id } })
+    ?? await prisma.resume.create({ data: { studentId: studentRow.id, name: "E2E Resume", isDefault: true } });
   const resumeVersion = await prisma.resumeVersion.findFirst({ where: { resumeId: resume.id } })
     ?? await prisma.resumeVersion.create({ data: { resumeId: resume.id, version: 1, isGenerated: true } });
   const application = await prisma.application.create({
     data: { studentId: studentRow.id, driveId: drive.id, jobRoleId: jobRole.id, status: "SELECTED", resumeVersionId: resumeVersion.id },
   });
 
-  const student = await newSession(browser, ACCOUNTS.studentA.id);
+  const student = await newSession(browser, ACCOUNTS.studentB.id);
   const admin = await newSession(browser, ACCOUNTS.admin.id);
   try {
     // Student's Placement History, open before any offer exists.
