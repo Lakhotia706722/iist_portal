@@ -1,5 +1,5 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
-import { login, ACCOUNTS } from "../helpers";
+import { login, ACCOUNTS, fillRequiredDriveDates } from "../helpers";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -61,6 +61,8 @@ test("1 — Admin publishes a drive; Student's already-open Opportunities page s
     await admin.page.getByRole("combobox").filter({ hasText: /select company/i }).click();
     await admin.page.getByRole("option", { name: COMPANY_NAME }).click();
     await admin.page.getByLabel(/drive title/i).fill(DRIVE_TITLE);
+    // Phase 17 P3: opening/closing dates are now required at drive creation.
+    await fillRequiredDriveDates(admin.page);
     await admin.page.getByRole("dialog").getByRole("button", { name: /^create drive$/i }).click();
     await admin.page.getByPlaceholder(/search drives/i).fill(DRIVE_TITLE);
     await expect(admin.page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 15_000 });

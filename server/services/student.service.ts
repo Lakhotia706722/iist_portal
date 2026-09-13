@@ -232,7 +232,13 @@ export async function createStudentAccount(
     ...meta,
   });
 
-  await issuePasswordResetToken(user, { variant: "welcome" });
+  // Best-effort, matching bulkCreateStudentAccounts below: the account is
+  // already committed at this point, so a transient email failure must
+  // not make account creation itself look like it failed to the admin —
+  // it would already have succeeded, just silently, which is worse.
+  await issuePasswordResetToken(user, { variant: "welcome" }).catch((err) =>
+    console.error(`[createStudentAccount] Failed to send welcome email to ${user.email}:`, err)
+  );
 
   return { id: user.student!.id, userId: user.id, name: user.name, email: user.email, enrollmentNumber: user.student!.enrollmentNumber };
 }

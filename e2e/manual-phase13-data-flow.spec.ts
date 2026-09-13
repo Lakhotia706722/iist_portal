@@ -26,6 +26,7 @@
  * exactly what was just entered, not off by a seed baseline.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { fillRequiredDriveDates } from "./helpers";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -106,6 +107,8 @@ test("1 — Admin: forced password change on first login, then creates Company +
   await page.getByRole("combobox").filter({ hasText: /select company/i }).click();
   await page.getByRole("option", { name: COMPANY_NAME }).click();
   await page.getByLabel(/drive title/i).fill(DRIVE_TITLE);
+  // Phase 17 P3: opening/closing dates are now required at drive creation.
+  await fillRequiredDriveDates(page);
   await page.getByRole("dialog").getByRole("button", { name: /^create drive$/i }).click();
   await page.getByPlaceholder(/search drives/i).fill(DRIVE_TITLE);
   await expect(page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 15_000 });

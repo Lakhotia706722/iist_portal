@@ -75,6 +75,16 @@ jobs:
         run: npx next start -p 4242 > server.log 2>&1 &
       - name: Wait for app to come up
         run: npx wait-on http://localhost:4242/login --timeout 60000
+      - name: Seed reference data (Departments/Branches/Batches/Skill catalog)
+        # e2e/seed-e2e.ts creates its own minimal Department/Branch/Batch
+        # rows (different names/codes, e.g. Branch code "CSE" vs this
+        # script's "BTECH-CSE") only as much as its own fixtures need — it
+        # was never meant to be the source of the full reference dataset.
+        # Several Phase 17 flows (the Skill Catalog search, and the new
+        # student-provisioning form's branch/batch pickers) exercise the
+        # real, complete admin-configured data this script provides, which
+        # was previously only ever run by hand in local dev — never in CI.
+        run: npx tsx prisma/seed-reference-data.ts
       - run: npx tsx e2e/seed-e2e.ts
       - name: Seed volume dataset (data-volume.spec.ts's 120-applicant drive)
         run: npx tsx scripts/seed-volume.ts

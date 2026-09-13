@@ -8,25 +8,12 @@ export interface EmailOptions {
   replyTo?: string;
 }
 
+// Only ever called once sendEmail() has confirmed SMTP_USER is set.
 function createTransport() {
-  const host = process.env.SMTP_HOST ?? "localhost";
-  const port = parseInt(process.env.SMTP_PORT ?? "1025");
-  const secure = process.env.SMTP_SECURE === "true";
-
-  // Dev: if no real SMTP, fall through to console transport
-  if (!process.env.SMTP_USER && process.env.NODE_ENV !== "production") {
-    return nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      ignoreTLS: true,
-    });
-  }
-
   return nodemailer.createTransport({
-    host,
-    port,
-    secure,
+    host: process.env.SMTP_HOST ?? "localhost",
+    port: parseInt(process.env.SMTP_PORT ?? "1025"),
+    secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -37,8 +24,17 @@ function createTransport() {
 export async function sendEmail(options: EmailOptions): Promise<void> {
   const from = process.env.EMAIL_FROM ?? "IIST Placement Cell <noreply@iist.ac.in>";
 
-  // In dev with no SMTP, just log the email to console
-  if (process.env.NODE_ENV !== "production" && !process.env.SMTP_USER) {
+  // Falls back to a console log whenever SMTP isn't configured — not
+  // gated on NODE_ENV, deliberately: `next build && next start` (what CI
+  // and this app's own E2E suite run) sets NODE_ENV=production same as a
+  // real deploy, but has no more real SMTP available than local dev does.
+  // A genuine production deployment always has SMTP_USER set (see
+  // LAUNCH_CHECKLIST.md's launch-readiness requirement for it), so this
+  // never masks a real misconfiguration there — it only stopped CI's
+  // first-ever email-sending test path (Phase 17 P4's student
+  // provisioning) from crashing with ECONNREFUSED trying to reach a
+  // mail server that was never going to exist in that environment.
+  if (!process.env.SMTP_USER) {
     console.log("─── [EMAIL - DEV CONSOLE] ───────────────────────────");
     console.log(`To: ${Array.isArray(options.to) ? options.to.join(", ") : options.to}`);
     console.log(`Subject: ${options.subject}`);

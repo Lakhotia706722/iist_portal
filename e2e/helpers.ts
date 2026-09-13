@@ -52,6 +52,28 @@ export async function login(page: Page, loginId: string, password = PASSWORD) {
   }
 }
 
+/**
+ * Phase 17 P3: application opening/closing dates are required fields on
+ * the real "Create Drive" form. Each date field's trigger button's
+ * accessible name is its FormLabel text (e.g. "Application Opens *"), not
+ * its "Pick a date" inner text — confirmed via an aria snapshot of the
+ * real dialog. Always navigates one month ahead before picking a day so
+ * the choice is never accidentally in the past or "today" (both disabled
+ * by the real Calendar component), regardless of what day of the month
+ * the suite runs on.
+ */
+export async function pickFutureDate(page: Page, fieldLabel: string, day: string) {
+  await page.getByRole("button", { name: fieldLabel }).click();
+  await page.getByRole("button", { name: "Go to the Next Month" }).click();
+  await page.getByRole("gridcell").filter({ hasText: new RegExp(`^${day}$`) }).getByRole("button").click();
+}
+
+/** Fills the two required drive dates on an already-open "Create Drive" dialog. */
+export async function fillRequiredDriveDates(page: Page) {
+  await pickFutureDate(page, "Application Opens *", "10");
+  await pickFutureDate(page, "Application Closes *", "20");
+}
+
 /** Collects console errors and page errors during a page's lifetime. */
 export function trackConsoleErrors(page: Page): string[] {
   const errors: string[] = [];

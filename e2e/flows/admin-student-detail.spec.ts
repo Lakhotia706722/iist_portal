@@ -36,9 +36,15 @@ test("Clicking a student's name from the admin list opens their real, unrestrict
   await expect(page.getByText("e2e-student-a@iist.ac.in")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("E2E Test Project")).toBeVisible();
 
-  // Applications tab — real data from the new overview endpoint.
+  // Applications tab — real data from the new overview endpoint. Checks
+  // against "E2E Shortlisted Drive" specifically: seed-e2e.ts guarantees
+  // that application ("e2e-application-shortlisted") unconditionally,
+  // unlike "E2E Test Drive"'s application, which only exists once
+  // apply-flow.spec.ts has actually run — this suite runs alphabetically
+  // (admin-student-detail before apply-flow), so asserting on the latter
+  // is a real ordering bug, not just a fixture-name choice.
   await page.getByRole("tab", { name: "Applications" }).click();
-  await expect(page.getByText("E2E Test Drive")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("E2E Shortlisted Drive")).toBeVisible({ timeout: 15_000 });
 
   // Compliance tab — reused ComplianceView + IncidentsClient, scoped to this student.
   await page.getByRole("tab", { name: "Compliance" }).click();

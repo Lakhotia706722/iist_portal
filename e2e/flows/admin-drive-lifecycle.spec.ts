@@ -1,5 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
-import { login, ACCOUNTS } from "../helpers";
+import { test, expect } from "@playwright/test";
+import { login, ACCOUNTS, fillRequiredDriveDates } from "../helpers";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -8,21 +8,6 @@ test.afterAll(() => prisma.$disconnect());
 const COMPANY_NAME = `E2E Lifecycle Co ${Date.now()}`;
 const DRIVE_TITLE = `E2E Lifecycle Drive ${Date.now()}`;
 const ROLE_TITLE = "E2E Lifecycle Engineer";
-
-/**
- * Phase 17 P3: application opening/closing dates are now required at drive
- * creation. Each date field's trigger button's accessible name is its
- * FormLabel text (e.g. "Application Opens *"), not its "Pick a date" inner
- * text — confirmed via an aria snapshot of the real dialog. Always
- * navigates one month ahead before picking a day so the choice is never
- * accidentally in the past or "today" (both disabled by the real Calendar
- * component), regardless of what day of the month the suite runs on.
- */
-async function pickFutureDate(page: Page, fieldLabel: string, day: string) {
-  await page.getByRole("button", { name: fieldLabel }).click();
-  await page.getByRole("button", { name: "Go to the Next Month" }).click();
-  await page.getByRole("gridcell").filter({ hasText: new RegExp(`^${day}$`) }).getByRole("button").click();
-}
 
 test("Admin drive lifecycle: create company+drive+role, publish, shortlist, round, attendance, offer -> student sees it", async ({ page }) => {
   test.setTimeout(120_000); // this flow touches many first-compile-in-dev-mode routes
@@ -66,8 +51,7 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   await page.getByLabel(/drive title/i).fill(DRIVE_TITLE);
   // Phase 17 P3: opening/closing dates are now required (locked decision —
   // the apply-flow deadline logic depends on them existing).
-  await pickFutureDate(page, "Application Opens *", "10");
-  await pickFutureDate(page, "Application Closes *", "20");
+  await fillRequiredDriveDates(page);
   await page.getByRole("dialog").getByRole("button", { name: /^create drive$/i }).click();
   await page.getByPlaceholder(/search drives/i).fill(DRIVE_TITLE);
   await expect(page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 15_000 });
