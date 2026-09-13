@@ -58,9 +58,9 @@ export async function login(page: Page, loginId: string, password = PASSWORD) {
  * accessible name is its FormLabel text (e.g. "Application Opens *"), not
  * its "Pick a date" inner text — confirmed via an aria snapshot of the
  * real dialog. Always navigates one month ahead before picking a day so
- * the choice is never accidentally in the past or "today" (both disabled
- * by the real Calendar component), regardless of what day of the month
- * the suite runs on.
+ * the choice is never accidentally in the past (disabled by the real
+ * Calendar component), regardless of what day of the month the suite
+ * runs on.
  */
 export async function pickFutureDate(page: Page, fieldLabel: string, day: string) {
   await page.getByRole("button", { name: fieldLabel }).click();
@@ -68,9 +68,25 @@ export async function pickFutureDate(page: Page, fieldLabel: string, day: string
   await page.getByRole("gridcell").filter({ hasText: new RegExp(`^${day}$`) }).getByRole("button").click();
 }
 
-/** Fills the two required drive dates on an already-open "Create Drive" dialog. */
+/**
+ * Phase 18 P2: picks today's date without navigating months — today used
+ * to be disabled by the same Calendar component pickFutureDate works
+ * around (fixed in drive-form.tsx's isBeforeToday), so this is now safe.
+ * Targets the `today` modifier's own class (`bg-accent`, distinct from
+ * `selected`'s `bg-primary` — see components/ui/calendar.tsx) rather than
+ * matching the day-of-month text, which can collide with an outside-month
+ * day showing the same number in the same grid. react-day-picker v9 does
+ * not set `aria-current="date"` here despite that being the more obvious
+ * a11y-first guess — confirmed by a real failed run before landing on this.
+ */
+export async function pickTodayDate(page: Page, fieldLabel: string) {
+  await page.getByRole("button", { name: fieldLabel }).click();
+  await page.locator("button.bg-accent").click();
+}
+
+/** Fills the two required drive dates on an already-open "Create Drive" dialog: opens today, closes in the future. */
 export async function fillRequiredDriveDates(page: Page) {
-  await pickFutureDate(page, "Application Opens *", "10");
+  await pickTodayDate(page, "Application Opens *");
   await pickFutureDate(page, "Application Closes *", "20");
 }
 

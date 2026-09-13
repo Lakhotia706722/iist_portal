@@ -431,14 +431,24 @@ export default function DrivesPage() {
                         View Details
                       </DropdownMenuItem>
                       
-                      {getAvailableStatusTransitions(drive.status).map(status => (
-                        <DropdownMenuItem 
-                          key={status}
-                          onClick={() => handleUpdateStatus(drive, status)}
-                        >
-                          Change to {STATUS_OPTIONS.find(s => s.value === status)?.label}
-                        </DropdownMenuItem>
-                      ))}
+                      {getAvailableStatusTransitions(drive.status).map(status => {
+                        // Phase 18 P2: an empty published drive is a dead
+                        // end for students — block it here too, not just
+                        // server-side, so the admin sees why up front
+                        // instead of clicking through to an error toast.
+                        const requiresRoles = status === "PUBLISHED" || status === "APPLICATIONS_OPEN";
+                        const blocked = requiresRoles && drive._count.jobRoles === 0;
+                        return (
+                          <DropdownMenuItem
+                            key={status}
+                            disabled={blocked}
+                            title={blocked ? "Add at least one job role first — an empty drive has nothing for students to apply to." : undefined}
+                            onClick={() => !blocked && handleUpdateStatus(drive, status)}
+                          >
+                            Change to {STATUS_OPTIONS.find(s => s.value === status)?.label}
+                          </DropdownMenuItem>
+                        );
+                      })}
                       
                       {getAvailableStatusTransitions(drive.status).length > 0 && (
                         <DropdownMenuSeparator />

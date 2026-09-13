@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog, type AuditParams } from "./audit.service";
 import { ValidationError, NotFoundError } from "@/lib/errors";
-import { issuePasswordResetToken } from "@/lib/auth/password-reset";
+import { issuePasswordResetToken, generateStrongPassword } from "@/lib/auth/password-reset";
 import { getResumes } from "./resume.service";
 import { getStorageAdapter } from "@/lib/storage";
 import type {
@@ -203,7 +203,14 @@ export async function createStudentAccount(
     throw new ValidationError("Batch does not belong to the selected branch");
   }
 
-  const passwordHash = await unusablePasswordHash();
+  // "email" keeps the account unusable until the student follows the
+  // welcome-email link, exactly as Phase 17 built it. "direct" sets a real
+  // password immediately — admin-supplied, or generated here when blank —
+  // which is returned once below for the admin to hand to the student;
+  // only its hash is ever persisted.
+  const useDirect = data.deliveryMethod !== "email";
+  const plainPassword = useDirect ? (data.password || generateStrongPassword()) : undefined;
+  const passwordHash = useDirect ? await bcrypt.hash(plainPassword!, 12) : await unusablePasswordHash();
 
   const user = await prisma.user.create({
     data: {
@@ -228,25 +235,41 @@ export async function createStudentAccount(
     action: "CREATE",
     entity: "Student",
     entityId: user.student!.id,
-    newValues: { enrollmentNumber: data.enrollmentNumber, email: data.email, branchId: data.branchId, batchId: data.batchId },
+    newValues: { enrollmentNumber: data.enrollmentNumber, email: data.email, branchId: data.branchId, batchId: data.batchId, deliveryMethod: data.deliveryMethod },
     ...meta,
   });
 
-  // Best-effort, matching bulkCreateStudentAccounts below: the account is
-  // already committed at this point, so a transient email failure must
-  // not make account creation itself look like it failed to the admin —
-  // it would already have succeeded, just silently, which is worse.
-  await issuePasswordResetToken(user, { variant: "welcome" }).catch((err) =>
-    console.error(`[createStudentAccount] Failed to send welcome email to ${user.email}:`, err)
-  );
+  if (!useDirect) {
+    // Best-effort: the account is already committed at this point, so a
+    // transient email failure must not make account creation itself look
+    // like it failed to the admin — it would already have succeeded, just
+    // silently, which is worse.
+    await issuePasswordResetToken(user, { variant: "welcome" }).catch((err) =>
+      console.error(`[createStudentAccount] Failed to send welcome email to ${user.email}:`, err)
+    );
+  }
 
-  return { id: user.student!.id, userId: user.id, name: user.name, email: user.email, enrollmentNumber: user.student!.enrollmentNumber };
+  return {
+    id: user.student!.id,
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    enrollmentNumber: user.student!.enrollmentNumber,
+    password: plainPassword,
+  };
 }
 
 export interface BulkStudentRowError {
   row: number;
   enrollmentNumber: string;
   reason: string;
+}
+
+export interface BulkStudentCredential {
+  enrollmentNumber: string;
+  name: string;
+  email: string;
+  password: string;
 }
 
 /**
@@ -258,7 +281,7 @@ export async function bulkCreateStudentAccounts(
   rows: StudentCsvRowInput[],
   actorId: string,
   meta: RequestMeta = {}
-): Promise<{ created: number; errors: BulkStudentRowError[] }> {
+): Promise<{ created: number; errors: BulkStudentRowError[]; credentials: BulkStudentCredential[] }> {
   const enrollments = rows.map((r) => r.enrollmentNumber.trim());
   const emails = rows.map((r) => r.email.trim().toLowerCase());
   const branchCodes = [...new Set(rows.map((r) => r.branchCode.trim().toUpperCase()))];
@@ -327,12 +350,17 @@ export async function bulkCreateStudentAccounts(
 
   // All-or-nothing: a partial import would leave half the cohort without accounts.
   if (errors.length > 0) {
-    return { created: 0, errors };
+    return { created: 0, errors, credentials: [] };
   }
 
-  // bcrypt is async, so hashes must be computed up front — $transaction's
+  // Bulk is always "direct" delivery (Phase 18 P1): a real password per
+  // row — admin-supplied via the CSV's optional password column, or
+  // generated here when blank — returned once below so the admin can
+  // distribute a credentials CSV. bcrypt is async, so hashes (and the
+  // plaintext they came from) must be computed up front — $transaction's
   // array form needs already-built Prisma promises, not async callbacks.
-  const passwordHashes = await Promise.all(resolved.map(() => unusablePasswordHash()));
+  const plainPasswords = resolved.map(({ row }) => row.password || generateStrongPassword());
+  const passwordHashes = await Promise.all(plainPasswords.map((p) => bcrypt.hash(p, 12)));
 
   const createdUsers = await prisma.$transaction(
     resolved.map(({ row, branchId, batchId }, i) =>
@@ -356,10 +384,10 @@ export async function bulkCreateStudentAccounts(
     )
   );
 
-  // Accounts are committed at this point. Audit logging and welcome emails
-  // are best-effort per row from here — a failure in either must not undo
-  // the accounts already created, and writeAuditLog already swallows its
-  // own errors (see audit.service.ts).
+  // Accounts are committed at this point. Audit logging from here on is
+  // best-effort per row — a failure must not undo the accounts already
+  // created, and writeAuditLog already swallows its own errors (see
+  // audit.service.ts).
   await Promise.all(
     createdUsers.map((user) =>
       writeAuditLog({
@@ -367,21 +395,22 @@ export async function bulkCreateStudentAccounts(
         action: "CREATE",
         entity: "Student",
         entityId: user.student!.id,
-        newValues: { enrollmentNumber: user.student!.enrollmentNumber, email: user.email },
+        newValues: { enrollmentNumber: user.student!.enrollmentNumber, email: user.email, deliveryMethod: "direct" },
         ...meta,
       })
     )
   );
 
-  await Promise.all(
-    createdUsers.map((user) =>
-      issuePasswordResetToken(user, { variant: "welcome" }).catch((err) =>
-        console.error(`[bulkCreateStudentAccounts] Failed to send welcome email to ${user.email}:`, err)
-      )
-    )
-  );
-
-  return { created: createdUsers.length, errors: [] };
+  return {
+    created: createdUsers.length,
+    errors: [],
+    credentials: createdUsers.map((user, i) => ({
+      enrollmentNumber: user.student!.enrollmentNumber,
+      name: user.name,
+      email: user.email,
+      password: plainPasswords[i],
+    })),
+  };
 }
 
 // ─── Admin student-detail overview (Phase 17 P5) ───────────────────────────

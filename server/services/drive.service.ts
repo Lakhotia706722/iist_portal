@@ -318,7 +318,10 @@ export async function updateDriveStatus(
 ): Promise<DriveWithDetails> {
   const drive = await prisma.placementDrive.findUnique({
     where: { id },
-    include: { company: true },
+    include: {
+      company: true,
+      jobRoles: { where: { isActive: true }, select: { id: true } },
+    },
   });
 
   if (!drive) {
@@ -334,6 +337,19 @@ export async function updateDriveStatus(
   // Additional validations per status
   if (newStatus === "PUBLISHED" && !drive.company.isActive) {
     throw new ValidationError("Cannot publish drive for inactive company");
+  }
+
+  // Phase 18 P2 — root cause of a real "nothing shows to students" report:
+  // a drive with zero job roles was reaching APPLICATIONS_OPEN with
+  // nothing wrong with it structurally, but nothing for a student to ever
+  // see or apply to either — a dead end that looked like a bug from the
+  // admin side. Blocked at both steps since "published" is loosely used
+  // by admins to mean "not a draft anymore" regardless of which of the
+  // two real statuses that maps to.
+  if ((newStatus === "PUBLISHED" || newStatus === "APPLICATIONS_OPEN") && drive.jobRoles.length === 0) {
+    throw new ValidationError(
+      "Add at least one job role before publishing this drive — an empty drive has nothing for students to apply to."
+    );
   }
 
   const updatedDrive = await prisma.placementDrive.update({
@@ -419,7 +435,21 @@ export async function listActiveOpportunities(filters?: {
     // to then actually appear to a student) had never been exercised
     // end-to-end before — every prior test either set a close date or
     // bypassed this list entirely with a direct Application insert.
-    AND: [{ OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }] }],
+    //
+    // Phase 18 P2 — the mirror-image bug on the open side had never been
+    // caught: this query never checked applicationOpenAt at all, so a
+    // drive scheduled to open in the future (a real, supported case —
+    // admin sets an opening date ahead of time) was visible to students
+    // from the moment its status became APPLICATIONS_OPEN, regardless of
+    // that date. Confirmed with a direct probe against listActiveOpportunities
+    // (drive dates required, real fixtures) before touching this — a
+    // future-dated drive appeared immediately. Same "null means no
+    // constraint, a set date is the constraint" shape as the close-date
+    // fix above.
+    AND: [
+      { OR: [{ applicationOpenAt: null }, { applicationOpenAt: { lte: new Date() } }] },
+      { OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }] },
+    ],
   };
 
   if (filters?.search) {

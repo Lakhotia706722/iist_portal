@@ -44,6 +44,24 @@ import type { z } from "zod";
 
 type DriveFormData = z.infer<typeof driveSchema>;
 
+/**
+ * Phase 18 P2 — every date field below disabled "today" for the entire
+ * rest of the day: react-day-picker hands `disabled` a Date at midnight
+ * local time for each cell, so comparing it against `new Date()` (the
+ * exact current instant) makes today's cell "in the past" the moment any
+ * time has elapsed since midnight. An admin could never actually open
+ * applications "today" through this form — found while verifying the
+ * real fix for a "published drive, nothing shows to students" report,
+ * which needed exactly that: a drive opening today, end to end, through
+ * the real UI. Compares against the start of today instead, so today
+ * stays selectable and only genuinely past days are disabled.
+ */
+function isBeforeToday(date: Date): boolean {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  return date < startOfToday;
+}
+
 interface Company {
   id: string;
   name: string;
@@ -335,7 +353,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
                           mode: "single",
                           selected: field.value ? new Date(field.value) : undefined,
                           onSelect: (date: Date | undefined) => field.onChange(date?.toISOString() || ""),
-                          disabled: (date: Date) => date < new Date(),
+                          disabled: (date: Date) => isBeforeToday(date),
                           initialFocus: true,
                         } as any}
                       />
@@ -377,7 +395,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
                           mode: "single",
                           selected: field.value ? new Date(field.value) : undefined,
                           onSelect: (date: Date | undefined) => field.onChange(date?.toISOString() || ""),
-                          disabled: (date: Date) => date < new Date(),
+                          disabled: (date: Date) => isBeforeToday(date),
                           initialFocus: true,
                         } as any}
                       />
@@ -419,7 +437,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
                           mode: "single",
                           selected: field.value ? new Date(field.value) : undefined,
                           onSelect: (date: Date | undefined) => field.onChange(date?.toISOString() || ""),
-                          disabled: (date: Date) => date < new Date(),
+                          disabled: (date: Date) => isBeforeToday(date),
                           initialFocus: true,
                         } as any}
                       />
@@ -461,7 +479,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
                           mode: "single",
                           selected: field.value ? new Date(field.value) : undefined,
                           onSelect: (date: Date | undefined) => field.onChange(date?.toISOString() || ""),
-                          disabled: (date: Date) => date < new Date(),
+                          disabled: (date: Date) => isBeforeToday(date),
                           initialFocus: true,
                         } as any}
                       />

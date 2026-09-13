@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { passwordStrengthSchema } from "./common";
 
 export const departmentSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -95,11 +96,14 @@ export const updateUserSchema = z.object({
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
-// ─── Student provisioning (Phase 17 P4) ────────────────────────────────────
-// Admin-created student accounts: no password is generated/emailed — the
-// account is created with mustChangePassword:true and the student receives
-// a "set your password" email via the same PasswordResetToken mechanism
-// forgot-password already uses (see lib/auth/password-reset.ts).
+// ─── Student provisioning (Phase 17 P4, extended Phase 18 P1) ──────────────
+// Admin-created student accounts, two delivery methods for the initial
+// credential: "direct" (default) — the admin sets or auto-generates the
+// password and it's revealed to them once — or "email" (the original
+// Phase 17 behavior) — an unusable password is set and the student
+// receives a "set your password" email via the same PasswordResetToken
+// mechanism forgot-password uses (see lib/auth/password-reset.ts). Either
+// way mustChangePassword:true is set unconditionally.
 
 export const createStudentSchema = z.object({
   name: z.string().min(1, "Full name is required").max(200),
@@ -107,13 +111,18 @@ export const createStudentSchema = z.object({
   enrollmentNumber: z.string().min(1, "Enrollment number is required").max(50),
   branchId: z.string().min(1, "Branch is required"),
   batchId: z.string().min(1, "Batch is required"),
+  deliveryMethod: z.enum(["direct", "email"]).default("direct"),
+  // Only meaningful when deliveryMethod is "direct"; blank means "generate one".
+  password: z.union([passwordStrengthSchema, z.literal("")]).optional(),
 });
 
 export type CreateStudentInput = z.infer<typeof createStudentSchema>;
 
 // One CSV row — resolved against Branch.code and Batch.academicYear (scoped
 // to that branch) rather than internal ids, since that's what a CSV author
-// can reasonably supply.
+// can reasonably supply. Bulk creation is always "direct" delivery (see
+// bulkCreateStudentAccounts) — an optional password column, auto-generated
+// per row when blank, with credentials returned as a downloadable CSV.
 export const studentCsvRowSchema = z.object({
   enrollmentNumber: z.string().min(1, "Enrollment number is required").max(50),
   name: z.string().min(1, "Full name is required").max(200),
@@ -122,6 +131,7 @@ export const studentCsvRowSchema = z.object({
   batchAcademicYear: z
     .string()
     .regex(/^\d{4}-\d{4}$/, "Batch academic year must be formatted YYYY-YYYY"),
+  password: z.union([passwordStrengthSchema, z.literal("")]).optional(),
 });
 
 export const bulkCreateStudentsSchema = z.object({

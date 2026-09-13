@@ -19,3 +19,19 @@ export function optionalNumber<T extends z.ZodTypeAny>(inner: T) {
     inner.optional()
   );
 }
+
+/**
+ * The one password-strength rule enforced everywhere a password is set —
+ * reset-password, change-password, and (Phase 18) admin-set student
+ * passwords. Previously duplicated verbatim in lib/validations/auth.ts's
+ * resetPasswordSchema and changePasswordSchema; extracted here so every
+ * password-setting surface enforces exactly the same rule by construction
+ * instead of by convention.
+ */
+export const passwordStrengthSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128)
+  .regex(/[A-Z]/, "Must contain at least one uppercase letter")
+  .regex(/[a-z]/, "Must contain at least one lowercase letter")
+  .regex(/[0-9]/, "Must contain at least one number");

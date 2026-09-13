@@ -10,6 +10,16 @@ import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
 
+/**
+ * A random password guaranteed to satisfy passwordStrengthSchema (upper,
+ * lower, digit, 8+ chars) — shared by staff account creation
+ * (user.service.ts) and, since Phase 18, admin-set student passwords, so
+ * there's exactly one "what does a generated password look like" answer.
+ */
+export function generateStrongPassword(): string {
+  return randomBytes(9).toString("base64").replace(/[+/=]/g, "x") + "A1!";
+}
+
 interface IssuePasswordResetTokenOptions {
   /** "reset" (default): existing user asked to reset their password.
    *  "welcome": a newly provisioned account setting its first password. */

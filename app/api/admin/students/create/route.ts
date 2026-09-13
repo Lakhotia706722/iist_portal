@@ -1,7 +1,9 @@
 /**
- * Individual student account provisioning — Phase 17 P4.
- * POST - create one student's User+Student record and email them a
- *        "set your password" link (no plaintext password is ever returned).
+ * Individual student account provisioning — Phase 17 P4, extended Phase 18 P1.
+ * POST - create one student's User+Student record. deliveryMethod "direct"
+ *        (default) returns the plaintext password once in the response for
+ *        a one-time admin reveal; "email" sends a "set your password" link
+ *        instead and never returns a password.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac/server-guard";

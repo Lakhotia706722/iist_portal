@@ -1,10 +1,12 @@
 /**
- * Bulk student account provisioning via CSV — Phase 17 P4.
+ * Bulk student account provisioning via CSV — Phase 17 P4, extended Phase 18 P1.
  * POST - client parses the .csv into rows and posts them as JSON (same
  *        convention as SkillUp's results upload and drive CSV shortlisting;
  *        see skillup.service.ts's uploadResults). All-or-nothing: any bad
  *        row rejects the whole batch with row-level errors, nothing partial
- *        is ever written.
+ *        is ever written. On success, `credentials` carries each row's
+ *        plaintext password once, for the admin to download as a CSV —
+ *        never persisted, this is the only time it's retrievable.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/rbac/server-guard";

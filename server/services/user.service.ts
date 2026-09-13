@@ -13,11 +13,11 @@
  * than inventing an invite-email system.
  */
 
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { writeAuditLog } from "./audit.service";
+import { generateStrongPassword } from "@/lib/auth/password-reset";
 import type { CreateUserInput, UpdateUserInput } from "@/lib/validations/admin";
 
 export interface UserListFilters {
@@ -59,11 +59,6 @@ export async function listUsers(filters: UserListFilters = {}) {
   return { users, total };
 }
 
-/** Generates a random 12-character temporary password (upper/lower/digit). */
-function generateTempPassword(): string {
-  return crypto.randomBytes(9).toString("base64").replace(/[+/=]/g, "x") + "A1!";
-}
-
 export async function createStaffUser(data: CreateUserInput, actorId: string) {
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) throw new ValidationError("A user with this email already exists");
@@ -73,7 +68,7 @@ export async function createStaffUser(data: CreateUserInput, actorId: string) {
     if (existingHod) throw new ValidationError("This department already has a HOD assigned");
   }
 
-  const tempPassword = generateTempPassword();
+  const tempPassword = generateStrongPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 12);
 
   const user = await prisma.user.create({

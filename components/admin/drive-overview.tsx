@@ -6,7 +6,7 @@
 
 "use client";
 
-import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award } from "lucide-react";
+import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -15,6 +15,7 @@ interface DriveOverviewProps {
     id: string;
     title: string;
     description: string | null;
+    status: string;
     applicationOpenAt: string | null;
     applicationCloseAt: string | null;
     driveStartDate: string | null;
@@ -31,8 +32,38 @@ interface DriveOverviewProps {
       name: string;
       industry: string;
     };
+    _count: {
+      jobRoles: number;
+    };
   };
   onUpdate: () => void;
+}
+
+/**
+ * Phase 18 P2 — root cause of a real "published drive, nothing shows to
+ * students" report: reaching APPLICATIONS_OPEN with zero job roles, or
+ * with an applicationOpenAt still in the future, is correct, intentional
+ * behavior (a scheduled drive, or one an admin hasn't finished setting
+ * up) — but until now there was no way for an admin looking at this page
+ * to know *why* students see nothing. One banner, most-relevant case
+ * first; returns null once nothing is actually wrong.
+ */
+function visibilityBanner(drive: DriveOverviewProps["drive"]): string | null {
+  if (drive.status === "DRAFT") {
+    return "This drive is still a draft — students can't see it. Publish it, then set it to Applications Open, to make it visible.";
+  }
+  if (drive.status === "PUBLISHED") {
+    return "This drive is published but not yet open for applications — students won't see it until you change its status to Applications Open.";
+  }
+  if (drive.status !== "APPLICATIONS_OPEN") return null;
+  if (drive._count.jobRoles === 0) {
+    return "This drive has no job roles yet — even though applications are open, there's nothing for a student to see or apply to. Add a job role.";
+  }
+  if (drive.applicationOpenAt && new Date(drive.applicationOpenAt) > new Date()) {
+    const opens = new Date(drive.applicationOpenAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    return `This drive becomes visible to students on ${opens}.`;
+  }
+  return null;
 }
 
 const WORK_MODE_LABELS = {
@@ -52,8 +83,17 @@ export function DriveOverview({ drive, onUpdate }: DriveOverviewProps) {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const banner = visibilityBanner(drive);
+
   return (
     <div className="space-y-6">
+      {banner && (
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{banner}</span>
+        </div>
+      )}
+
       {/* Drive Information */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

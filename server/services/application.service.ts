@@ -169,6 +169,15 @@ export async function applyForJobRole(
 
   if (!jobRole.drive.company.isActive) throw new ValidationError("Company is inactive");
 
+  // Phase 18 P2: the list query (listActiveOpportunities) now correctly
+  // hides a drive scheduled to open in the future, but that's a
+  // visibility filter, not an enforcement gate — a student who already
+  // has the detail page open (or a direct link) could otherwise still
+  // submit before the scheduled date. Mirrors the close-date check below.
+  if (jobRole.drive.applicationOpenAt && new Date() < jobRole.drive.applicationOpenAt) {
+    throw new ValidationError("Applications have not opened yet for this role");
+  }
+
   if (jobRole.drive.applicationCloseAt && new Date() > jobRole.drive.applicationCloseAt) {
     throw new ValidationError("Application deadline has passed");
   }
