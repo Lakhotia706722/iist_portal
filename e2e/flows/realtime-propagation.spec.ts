@@ -75,6 +75,18 @@ test("1 — Admin publishes a drive; Student's already-open Opportunities page s
       where: { id: drive.id },
       data: { applicationCloseAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
     });
+    // Phase 18 P2: publishing a drive with zero job roles is now blocked
+    // (a real, separate fix — an empty published drive was a dead end for
+    // students). Direct insert since job-role UI isn't this test's focus,
+    // same convention as admin-drive-lifecycle.spec.ts's direct-insert
+    // Application below its own out-of-scope steps.
+    await prisma.jobRole.create({ data: { driveId: drive.id, title: "RT Drive Role", isActive: true } });
+    // The admin page's own drives list was already fetched (with
+    // _count.jobRoles: 0) before that direct insert — reload so the "add a
+    // role first" guard sees the role that's actually there now.
+    await admin.page.reload();
+    await admin.page.getByPlaceholder(/search drives/i).fill(DRIVE_TITLE);
+    await expect(admin.page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 15_000 });
 
     const driveRow = admin.page.locator(".cursor-pointer", { hasText: DRIVE_TITLE });
     await driveRow.getByRole("button").last().click();

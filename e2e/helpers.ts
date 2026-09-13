@@ -72,16 +72,16 @@ export async function pickFutureDate(page: Page, fieldLabel: string, day: string
  * Phase 18 P2: picks today's date without navigating months — today used
  * to be disabled by the same Calendar component pickFutureDate works
  * around (fixed in drive-form.tsx's isBeforeToday), so this is now safe.
- * Targets the `today` modifier's own class (`bg-accent`, distinct from
- * `selected`'s `bg-primary` — see components/ui/calendar.tsx) rather than
- * matching the day-of-month text, which can collide with an outside-month
- * day showing the same number in the same grid. react-day-picker v9 does
- * not set `aria-current="date"` here despite that being the more obvious
- * a11y-first guess — confirmed by a real failed run before landing on this.
+ * Targets today's actual rendered accessible name, confirmed by dumping
+ * the real dialog's DOM: react-day-picker v9 gives today's cell an
+ * aria-label of "Today, <full date>" (e.g. "Today, Sunday, September
+ * 13th, 2026") — every other day's label omits the "Today, " prefix. Two
+ * earlier guesses (`[aria-current="date"]`, a permanent `bg-accent`
+ * class) both failed against the real DOM before landing on this.
  */
 export async function pickTodayDate(page: Page, fieldLabel: string) {
   await page.getByRole("button", { name: fieldLabel }).click();
-  await page.locator("button.bg-accent").click();
+  await page.getByRole("button", { name: /^today,/i }).click();
 }
 
 /** Fills the two required drive dates on an already-open "Create Drive" dialog: opens today, closes in the future. */

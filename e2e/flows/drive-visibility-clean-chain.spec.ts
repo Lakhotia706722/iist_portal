@@ -33,9 +33,16 @@ const ROLE_TITLE = "P2 Chain Engineer";
  * manual status steps -> a real student sees it, searches for it, and
  * completes the real apply flow — zero manual DB intervention beyond
  * fixture cleanup.
+ *
+ * Split into two test()s at the admin->student handoff: admin-drive-
+ * lifecycle.spec.ts already documented that a second /login as a
+ * different user, deep into one long-lived browser context after many
+ * prior navigations, is unreliable in this specific sandbox (not an app
+ * defect) — a fresh Playwright test() gets a fresh context, which is the
+ * same fix applied there.
  */
-test("Full chain: company -> drive (opens today) -> role -> publish -> student sees, searches, and applies", async ({ page }) => {
-  test.setTimeout(90_000);
+test("Full chain (1/2): company -> drive (opens today) -> role -> publish, no visibility banner remains", async ({ page }) => {
+  test.setTimeout(60_000);
 
   await prisma.company.deleteMany({ where: { name: COMPANY_NAME } });
   const studentForCleanup = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
@@ -96,15 +103,24 @@ test("Full chain: company -> drive (opens today) -> role -> publish -> student s
     page.getByText(/becomes visible to students on|has no job roles yet|still a draft|not yet open for applications/i)
   ).toHaveCount(0);
 
-  // 6 — A real student browses, searches, and sees it via the actual
-  // Opportunities page (not a direct DB check).
+  expectNoConsoleErrors(errors, "drive visibility clean chain (admin half)");
+});
+
+test("Full chain (2/2): a real student sees it, searches for it, and completes the real apply flow", async ({ page }) => {
+  test.setTimeout(60_000);
+  const drive = await prisma.placementDrive.findFirstOrThrow({ where: { title: DRIVE_TITLE } });
+  const student = await prisma.student.findUniqueOrThrow({ where: { enrollmentNumber: ACCOUNTS.studentA.id } });
+
+  const errors = trackConsoleErrors(page);
   await login(page, ACCOUNTS.studentA.id);
   await page.goto("/student/opportunities");
   await page.getByPlaceholder(/search opportunities/i).fill(DRIVE_TITLE);
   await expect(page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 15_000 });
 
-  // 7 — Real apply flow end to end (same steps as apply-flow.spec.ts).
-  await page.getByText(DRIVE_TITLE).click();
+  // Real apply flow end to end (same steps as apply-flow.spec.ts). Only
+  // the "View Details & Apply" link actually navigates — the card's title
+  // text itself isn't wrapped in a link (confirmed in opportunity-card.tsx).
+  await page.locator(`a[href="/student/opportunities/${drive.id}"]`).click();
   await page.waitForURL(`**/student/opportunities/${drive.id}`, { timeout: 15_000 });
   await expect(page.getByText(/eligible/i).first()).toBeVisible({ timeout: 15_000 });
 
@@ -126,16 +142,21 @@ test("Full chain: company -> drive (opens today) -> role -> publish -> student s
 
   await expect(page.getByText(/confirm application/i)).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: /submit application/i }).click();
-  await page.waitForURL(/\/student\/opportunities/, { timeout: 15_000 });
+  // handleApplicationSuccess() (opportunity-detail-content.tsx) just closes
+  // the modal and toasts — it never navigates, so waiting on a URL match
+  // here would resolve immediately against the page we're already on
+  // (a real race: the DB check below could then run before the submit
+  // actually committed). The toast is the real completion signal.
+  await expect(page.getByText(/application submitted/i)).toBeVisible({ timeout: 15_000 });
 
-  // 8 — DB-verified end state.
+  // DB-verified end state.
   const application = await prisma.application.findFirst({
-    where: { studentId: studentForCleanup.id, jobRoleId: { in: (await prisma.jobRole.findMany({ where: { driveId: drive.id }, select: { id: true } })).map((r) => r.id) } },
+    where: { studentId: student.id, jobRoleId: { in: (await prisma.jobRole.findMany({ where: { driveId: drive.id }, select: { id: true } })).map((r) => r.id) } },
   });
   expect(application, "no Application row was created").not.toBeNull();
   expect(application?.status).toBe("APPLIED");
 
-  expectNoConsoleErrors(errors, "drive visibility clean chain");
+  expectNoConsoleErrors(errors, "drive visibility clean chain (student half)");
 
   // Cleanup
   await prisma.application.deleteMany({ where: { driveId: drive.id } });

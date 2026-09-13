@@ -45,6 +45,10 @@ const ALLOWLIST: Record<string, string[]> = {
   // setTimeout only delays a post-success UI transition.
   "components/auth/change-password-form.tsx": ["setTimeout(() => { router.push"],
   "components/admin/users-roles-client.tsx": ["setTimeout(() => setCopied(false), 1500)"],
+  // Same "copied!" checkmark reset pattern as users-roles-client.tsx above
+  // — the actual copy already happened via navigator.clipboard.writeText;
+  // this setTimeout only reverts the icon, nothing async is being faked.
+  "components/admin/students-directory-client.tsx": ["setTimeout(() => setCopiedIndex((v) => (v === index ? null : v)), 1500)"],
 };
 
 type Finding = { file: string; line: number; text: string; rule: string };
