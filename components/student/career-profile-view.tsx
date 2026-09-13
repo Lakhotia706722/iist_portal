@@ -29,18 +29,30 @@ const PLATFORM_LABELS: Record<string, string> = {
   KAGGLE: "Kaggle", CODEFORCES: "Codeforces", CUSTOM: "Custom",
 };
 
-async function fetchCareerProfile() {
-  const res = await fetch("/api/student/profile/career");
+async function fetchCareerProfile(viewedStudentId?: string) {
+  const url = viewedStudentId
+    ? `/api/student/profile/career?studentId=${viewedStudentId}`
+    : "/api/student/profile/career";
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to load profile");
   return res.json();
 }
 
-interface Props { studentId: string; studentName: string; }
+interface Props {
+  studentId: string;
+  studentName: string;
+  /** "self" (default): the logged-in student viewing their own profile —
+   *  fetches with no studentId param (the API resolves it from the
+   *  session). "admin": a staff viewer looking at someone else's profile
+   *  (Phase 17 P5) — fetches that student's id explicitly and, for
+   *  TP_ADMIN, gets the unrestricted (unmasked) view. */
+  mode?: "self" | "admin";
+}
 
-export function CareerProfileView({ studentId, studentName }: Props) {
+export function CareerProfileView({ studentId, studentName, mode = "self" }: Props) {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["career-profile", studentId],
-    queryFn: fetchCareerProfile,
+    queryKey: ["career-profile", studentId, mode],
+    queryFn: () => fetchCareerProfile(mode === "admin" ? studentId : undefined),
   });
 
   if (isLoading) return <LoadingState text="Assembling your profile..." />;
@@ -50,8 +62,12 @@ export function CareerProfileView({ studentId, studentName }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Completion widget */}
-      <ProfileCompletionWidget />
+      {/* Completion widget — self-view only: it nudges the logged-in
+          student to complete their OWN profile (links to /student/profile/*
+          edit pages) and its API is hard-scoped to the caller's own
+          studentId, so it 403s and makes no sense when an admin is
+          viewing someone else's profile. */}
+      {mode === "self" && <ProfileCompletionWidget />}
 
       {/* Hero card */}
       <Card>

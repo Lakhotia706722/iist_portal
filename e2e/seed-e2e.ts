@@ -62,9 +62,13 @@ async function main() {
     }));
 
   // ── Student A: rich profile, CSE ─────────────────────────────────────────
+  // update resets name/firstName/lastName on every reseed — other suites
+  // (e.g. student-profile-edit.spec.ts) edit this student's name for real
+  // through the UI, and an empty `update: {}` left that drift in place for
+  // every test after it (same bug class as the company isActive fix above).
   const userA = await prisma.user.upsert({
     where: { email: "e2e-student-a@iist.ac.in" },
-    update: {},
+    update: { name: "E2E Student A" },
     create: {
       name: "E2E Student A", email: "e2e-student-a@iist.ac.in",
       passwordHash: HASH, role: "STUDENT", isActive: true, mustChangePassword: false,
@@ -72,7 +76,7 @@ async function main() {
   });
   const studentA = await prisma.student.upsert({
     where: { userId: userA.id },
-    update: {},
+    update: { firstName: "E2E", lastName: "Student A" },
     create: {
       userId: userA.id, enrollmentNumber: "E2E2021CS01", branchId: branchCS.id, batchId: batchCS.id,
       profileStatus: "VERIFIED", onboardingStep: 2,
@@ -145,7 +149,7 @@ async function main() {
   // ── Student B: minimal profile, AE (isolation checks) ───────────────────
   const userB = await prisma.user.upsert({
     where: { email: "e2e-student-b@iist.ac.in" },
-    update: {},
+    update: { name: "E2E Student B" },
     create: {
       name: "E2E Student B", email: "e2e-student-b@iist.ac.in",
       passwordHash: HASH, role: "STUDENT", isActive: true, mustChangePassword: false,
@@ -153,7 +157,7 @@ async function main() {
   });
   const studentB = await prisma.student.upsert({
     where: { userId: userB.id },
-    update: {},
+    update: { firstName: "E2E", lastName: "Student B" },
     create: {
       userId: userB.id, enrollmentNumber: "E2E2021AE01", branchId: branchAE.id, batchId: batchAE.id,
       profileStatus: "INCOMPLETE", onboardingStep: 2,
@@ -209,12 +213,15 @@ async function main() {
   // ── Two companies + reps (cross-company isolation) ──────────────────────
   const companyA = await prisma.company.upsert({
     where: { slug: "e2e-company-a" },
-    update: {},
+    // Re-assert isActive on every reseed: another suite (company
+    // activation toggling) can flip this to false, and an empty `update`
+    // here left that regressed state in place for every test after it.
+    update: { isActive: true },
     create: { name: "E2E Company A", slug: "e2e-company-a", industry: "TECHNOLOGY", isActive: true },
   });
   const companyB = await prisma.company.upsert({
     where: { slug: "e2e-company-b" },
-    update: {},
+    update: { isActive: true },
     create: { name: "E2E Company B", slug: "e2e-company-b", industry: "FINANCE", isActive: true },
   });
   const repAUser = await prisma.user.upsert({

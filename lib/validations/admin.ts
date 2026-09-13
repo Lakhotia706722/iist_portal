@@ -55,9 +55,10 @@ export type BatchInput = z.infer<typeof batchSchema>;
 
 // ─── Users & Roles (Phase 12) ──────────────────────────────────────────────
 // Staff accounts only (TP_ADMIN / FACULTY / HOD / COMPANY_REP) — STUDENT
-// accounts are created through registration/onboarding, a separate flow
-// with far more required fields (enrollment number, branch, batch...) that
-// this admin screen isn't taking over.
+// accounts are provisioned through the dedicated admin student-creation
+// flow instead (createStudentSchema / bulkCreateStudentsSchema below,
+// Phase 17 P4), which collects the extra required fields (enrollment
+// number, branch, batch) this screen doesn't ask for.
 
 export const STAFF_ROLES = ["TP_ADMIN", "FACULTY", "HOD", "COMPANY_REP"] as const;
 
@@ -93,3 +94,39 @@ export const updateUserSchema = z.object({
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+// ─── Student provisioning (Phase 17 P4) ────────────────────────────────────
+// Admin-created student accounts: no password is generated/emailed — the
+// account is created with mustChangePassword:true and the student receives
+// a "set your password" email via the same PasswordResetToken mechanism
+// forgot-password already uses (see lib/auth/password-reset.ts).
+
+export const createStudentSchema = z.object({
+  name: z.string().min(1, "Full name is required").max(200),
+  email: z.string().email("Enter a valid college email"),
+  enrollmentNumber: z.string().min(1, "Enrollment number is required").max(50),
+  branchId: z.string().min(1, "Branch is required"),
+  batchId: z.string().min(1, "Batch is required"),
+});
+
+export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+
+// One CSV row — resolved against Branch.code and Batch.academicYear (scoped
+// to that branch) rather than internal ids, since that's what a CSV author
+// can reasonably supply.
+export const studentCsvRowSchema = z.object({
+  enrollmentNumber: z.string().min(1, "Enrollment number is required").max(50),
+  name: z.string().min(1, "Full name is required").max(200),
+  email: z.string().email("Enter a valid college email"),
+  branchCode: z.string().min(1, "Branch code is required").max(20),
+  batchAcademicYear: z
+    .string()
+    .regex(/^\d{4}-\d{4}$/, "Batch academic year must be formatted YYYY-YYYY"),
+});
+
+export const bulkCreateStudentsSchema = z.object({
+  rows: z.array(studentCsvRowSchema).min(1, "At least one row is required").max(1000),
+});
+
+export type StudentCsvRowInput = z.infer<typeof studentCsvRowSchema>;
+export type BulkCreateStudentsInput = z.infer<typeof bulkCreateStudentsSchema>;

@@ -1,10 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { forgotPasswordSchema } from "@/lib/validations/auth";
-import { sendEmail } from "@/lib/email";
-import { randomBytes } from "crypto";
-import { render } from "@react-email/components";
-import { PasswordResetEmail } from "@/lib/email/templates/password-reset";
+import { issuePasswordResetToken } from "@/lib/auth/password-reset";
 import { checkRateLimit, rateLimitedResponse } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -23,30 +20,7 @@ export async function POST(req: NextRequest) {
     // Always return 200 to prevent email enumeration
     if (!user || !user.isActive) return Response.json({ ok: true });
 
-    // Invalidate previous unused tokens
-    await prisma.passwordResetToken.updateMany({
-      where: { userId: user.id, usedAt: null },
-      data: { usedAt: new Date() },
-    });
-
-    const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    await prisma.passwordResetToken.create({
-      data: { userId: user.id, token, expiresAt },
-    });
-
-    const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
-    const html = await render(
-      PasswordResetEmail({ userName: user.name, resetUrl, expiresInMinutes: 60 })
-    );
-
-    await sendEmail({
-      to: user.email,
-      subject: "Reset your IIST Placement Portal password",
-      html,
-      text: `Reset your password: ${resetUrl}\n\nThis link expires in 60 minutes.`,
-    });
+    await issuePasswordResetToken(user);
 
     return Response.json({ ok: true });
   } catch (err) {

@@ -27,13 +27,22 @@ export const authConfig: NextAuthConfig = {
 
       const isAuthPage =
         pathname.startsWith("/login") ||
-        pathname.startsWith("/forgot-password") ||
-        pathname.startsWith("/reset-password");
+        pathname.startsWith("/forgot-password");
 
       if (isAuthPage) {
         if (isLoggedIn) return Response.redirect(new URL("/dashboard", nextUrl));
         return true;
       }
+
+      // /reset-password is deliberately NOT bounced away when already
+      // logged in — unlike /login or /forgot-password, a visit here is
+      // tied to a specific token from an email link, not general session
+      // state. Silently redirecting an authenticated visitor away (found
+      // via Phase 17 P4's real-browser test of the new admin-provisioned
+      // "set your password" email flow) meant the link a just-created
+      // student, or anyone with a stale/active session, received could
+      // never actually be used to set a password.
+      if (pathname.startsWith("/reset-password")) return true;
 
       if (!isLoggedIn) return false;
       return true;

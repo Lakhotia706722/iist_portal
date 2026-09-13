@@ -119,21 +119,59 @@ async function main() {
 
   // ── Skill catalog ────────────────────────────────────────────────────────
   const SKILLS: Array<{ name: string; category: (typeof SKILL_CATEGORIES)[number] }> = [
+    // Programming languages
     { name: "C", category: "PROGRAMMING" }, { name: "C++", category: "PROGRAMMING" },
     { name: "Python", category: "PROGRAMMING" }, { name: "Java", category: "PROGRAMMING" },
     { name: "JavaScript", category: "PROGRAMMING" }, { name: "TypeScript", category: "PROGRAMMING" },
-    { name: "MATLAB", category: "PROGRAMMING" },
-    { name: "React", category: "FRAMEWORKS" }, { name: "Node.js", category: "FRAMEWORKS" },
-    { name: "Django", category: "FRAMEWORKS" }, { name: "Spring Boot", category: "FRAMEWORKS" },
+    { name: "MATLAB", category: "PROGRAMMING" }, { name: "Go", category: "PROGRAMMING" },
+    { name: "Rust", category: "PROGRAMMING" }, { name: "Kotlin", category: "PROGRAMMING" },
+    { name: "Swift", category: "PROGRAMMING" }, { name: "PHP", category: "PROGRAMMING" },
+    { name: "Ruby", category: "PROGRAMMING" }, { name: "R", category: "PROGRAMMING" },
+    { name: "Scala", category: "PROGRAMMING" }, { name: "SQL", category: "PROGRAMMING" },
+    { name: "Embedded C", category: "PROGRAMMING" }, { name: "VHDL", category: "PROGRAMMING" },
+    // Frameworks & libraries
+    { name: "React", category: "FRAMEWORKS" }, { name: "Next.js", category: "FRAMEWORKS" },
+    { name: "Node.js", category: "FRAMEWORKS" }, { name: "Express.js", category: "FRAMEWORKS" },
+    { name: "Django", category: "FRAMEWORKS" }, { name: "Flask", category: "FRAMEWORKS" },
+    { name: "FastAPI", category: "FRAMEWORKS" }, { name: "Spring Boot", category: "FRAMEWORKS" },
+    { name: "Angular", category: "FRAMEWORKS" }, { name: "Vue.js", category: "FRAMEWORKS" },
+    { name: ".NET", category: "FRAMEWORKS" }, { name: "React Native", category: "FRAMEWORKS" },
+    { name: "Flutter", category: "FRAMEWORKS" }, { name: "GraphQL", category: "FRAMEWORKS" },
+    { name: "Tailwind CSS", category: "FRAMEWORKS" },
+    // Databases
     { name: "PostgreSQL", category: "DATABASES" }, { name: "MySQL", category: "DATABASES" },
-    { name: "MongoDB", category: "DATABASES" },
+    { name: "MongoDB", category: "DATABASES" }, { name: "Redis", category: "DATABASES" },
+    { name: "SQLite", category: "DATABASES" }, { name: "Oracle Database", category: "DATABASES" },
+    { name: "Microsoft SQL Server", category: "DATABASES" }, { name: "Firebase", category: "DATABASES" },
+    { name: "Elasticsearch", category: "DATABASES" }, { name: "Cassandra", category: "DATABASES" },
+    // AI / ML
     { name: "Machine Learning", category: "AI_ML" }, { name: "Deep Learning", category: "AI_ML" },
     { name: "Computer Vision", category: "AI_ML" }, { name: "Natural Language Processing", category: "AI_ML" },
-    { name: "Git", category: "TOOLS" }, { name: "Docker", category: "TOOLS" }, { name: "AWS", category: "TOOLS" },
-    { name: "Linux", category: "TOOLS" },
+    { name: "Generative AI", category: "AI_ML" }, { name: "Large Language Models (LLMs)", category: "AI_ML" },
+    { name: "TensorFlow", category: "AI_ML" }, { name: "PyTorch", category: "AI_ML" },
+    { name: "Scikit-learn", category: "AI_ML" }, { name: "Keras", category: "AI_ML" },
+    { name: "OpenCV", category: "AI_ML" }, { name: "Reinforcement Learning", category: "AI_ML" },
+    { name: "Data Science", category: "AI_ML" }, { name: "Pandas", category: "AI_ML" },
+    { name: "NumPy", category: "AI_ML" },
+    // Tools & platforms
+    { name: "Git", category: "TOOLS" }, { name: "GitHub", category: "TOOLS" },
+    { name: "Docker", category: "TOOLS" }, { name: "Kubernetes", category: "TOOLS" },
+    { name: "AWS", category: "TOOLS" }, { name: "Azure", category: "TOOLS" },
+    { name: "Google Cloud Platform (GCP)", category: "TOOLS" }, { name: "Linux", category: "TOOLS" },
+    { name: "Jenkins", category: "TOOLS" }, { name: "CI/CD", category: "TOOLS" },
+    { name: "Jira", category: "TOOLS" }, { name: "Postman", category: "TOOLS" },
+    { name: "Figma", category: "TOOLS" }, { name: "Excel", category: "TOOLS" },
+    { name: "AutoCAD", category: "TOOLS" }, { name: "SolidWorks", category: "TOOLS" },
+    { name: "ANSYS", category: "TOOLS" }, { name: "Simulink", category: "TOOLS" },
+    // Soft skills
     { name: "Communication", category: "SOFT_SKILLS" }, { name: "Teamwork", category: "SOFT_SKILLS" },
     { name: "Leadership", category: "SOFT_SKILLS" }, { name: "Problem Solving", category: "SOFT_SKILLS" },
-    { name: "English", category: "LANGUAGES" }, { name: "Hindi", category: "LANGUAGES" }, { name: "Malayalam", category: "LANGUAGES" },
+    { name: "Time Management", category: "SOFT_SKILLS" }, { name: "Critical Thinking", category: "SOFT_SKILLS" },
+    { name: "Adaptability", category: "SOFT_SKILLS" }, { name: "Public Speaking", category: "SOFT_SKILLS" },
+    // Languages
+    { name: "English", category: "LANGUAGES" }, { name: "Hindi", category: "LANGUAGES" },
+    { name: "Malayalam", category: "LANGUAGES" }, { name: "Tamil", category: "LANGUAGES" },
+    { name: "Telugu", category: "LANGUAGES" }, { name: "Kannada", category: "LANGUAGES" },
   ];
   for (const s of SKILLS) {
     const existing = await prisma.skill.findFirst({ where: { name: s.name } });

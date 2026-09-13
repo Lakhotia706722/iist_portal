@@ -309,7 +309,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
               name="applicationOpenAt"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Application Opens</FormLabel>
+                  <FormLabel>Application Opens *</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -351,7 +351,7 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
               name="applicationCloseAt"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Application Closes</FormLabel>
+                  <FormLabel>Application Closes *</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>

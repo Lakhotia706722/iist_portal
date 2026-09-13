@@ -93,9 +93,14 @@ export async function GET(req: NextRequest) {
         }
       : null;
 
-    // Mask private fields based on visibility settings (only apply when viewed by student themselves)
+    // Mask private fields based on visibility settings — the student
+    // themselves always sees everything, and so does TP_ADMIN (Phase 17 P5:
+    // the admin student-detail view is deliberately unrestricted, unlike
+    // the Company Rep's allowlisted view in company-rep.service.ts). Any
+    // other non-student viewer (Faculty/HOD) still gets the masked view.
     const isOwnProfile = actor.studentId === studentId;
-    const applyVisibility = isOwnProfile ? false : true; // students see all their own fields
+    const isUnrestrictedViewer = isOwnProfile || actor.role === "TP_ADMIN";
+    const applyVisibility = !isUnrestrictedViewer;
 
     const profile = {
       id: student.id,

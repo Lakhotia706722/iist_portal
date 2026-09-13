@@ -83,21 +83,28 @@ function studentName(s: Interview["student"]) {
   return [s.firstName, s.lastName].filter(Boolean).join(" ") || s.enrollmentNumber;
 }
 
-export function AdminInterviewsClient() {
+interface AdminInterviewsClientProps {
+  /** Scope the list to one student's interviews — used by the admin
+   *  student-detail page (Phase 17 P5). Also pre-fills the schedule form. */
+  studentId?: string;
+}
+
+export function AdminInterviewsClient({ studentId }: AdminInterviewsClientProps = {}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(() => (studentId ? { ...EMPTY_FORM, studentId } : EMPTY_FORM));
   const [formError, setFormError] = useState<string | null>(null);
   const [scoreTarget, setScoreTarget] = useState<Interview | null>(null);
   const [result, setResult] = useState(EMPTY_RESULT);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["admin-interviews", search],
+    queryKey: ["admin-interviews", search, studentId],
     queryFn: async () => {
       const qs = new URLSearchParams({ limit: "100" });
       if (search) qs.set("search", search);
+      if (studentId) qs.set("studentId", studentId);
       const res = await fetch(`/api/admin/interviews?${qs}`);
       if (!res.ok) throw new Error("Failed to load interviews");
       return res.json() as Promise<{ interviews: Interview[]; total: number }>;
@@ -208,7 +215,7 @@ export function AdminInterviewsClient() {
       <div className="flex flex-wrap items-center gap-3">
         <Button
           onClick={() => {
-            setForm(EMPTY_FORM);
+            setForm(studentId ? { ...EMPTY_FORM, studentId } : EMPTY_FORM);
             setFormError(null);
             setCreateOpen(true);
           }}
@@ -216,16 +223,18 @@ export function AdminInterviewsClient() {
           <Plus className="mr-2 h-4 w-4" />
           Schedule interview
         </Button>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Search student or interviewer"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search interviews"
-          />
-        </div>
+        {!studentId && (
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search student or interviewer"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search interviews"
+            />
+          </div>
+        )}
       </div>
 
       {interviews.length === 0 ? (

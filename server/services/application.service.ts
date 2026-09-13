@@ -73,12 +73,14 @@ export type StudentApplicationSummary = {
   status: string;
   appliedAt: Date;
   jobRole: {
+    id: string;
     title: string;
     ctcMin: number | null;
     ctcMax: number | null;
+    drive: { id: string };
   };
   company: { name: string; logoKey: string | null; logoUrl: string | null };
-  drive: { title: string; status: string };
+  drive: { id: string; title: string; status: string };
   currentRound?: { title: string; scheduledAt: Date | null };
   /** Full status-change timeline — feeds the student Journey Tracker. */
   statusHistory: Array<{
@@ -423,11 +425,13 @@ export async function listStudentApplications(
         appliedAt: true,
         jobRole: {
           select: {
+            id: true,
             title: true,
             ctcMin: true,
             ctcMax: true,
             drive: {
               select: {
+                id: true,
                 title: true,
                 status: true,
                 company: { select: { name: true, logoKey: true } },
@@ -472,7 +476,7 @@ export async function listStudentApplications(
             ? await storage.getSignedUrl(app.jobRole.drive.company.logoKey)
             : null,
         },
-        drive: { title: app.jobRole.drive.title, status: app.jobRole.drive.status },
+        drive: { id: app.jobRole.drive.id, title: app.jobRole.drive.title, status: app.jobRole.drive.status },
         statusHistory: app.statusHistory.map(h => ({
           id: h.id,
           fromStatus: h.fromStatus,

@@ -73,8 +73,11 @@ export const driveSchema = z.object({
     .regex(/^\d{4}-\d{4}$/, "Format: YYYY-YYYY e.g. 2024-2025"),
   status: z.enum(DRIVE_STATUSES).default("DRAFT"),
   description: z.string().max(10000).optional().or(z.literal("")),
-  applicationOpenAt: z.string().optional().or(z.literal("")),
-  applicationCloseAt: z.string().optional().or(z.literal("")),
+  // Locked (Phase 17 P3): the apply-flow's deadline/eligibility logic depends
+  // on these two existing, so they are required at creation — unlike
+  // driveStartDate/driveEndDate below, which are purely informational.
+  applicationOpenAt: z.string().min(1, "Application opening date is required"),
+  applicationCloseAt: z.string().min(1, "Application deadline is required"),
   driveStartDate: z.string().optional().or(z.literal("")),
   driveEndDate: z.string().optional().or(z.literal("")),
   workMode: z.enum(WORK_MODES).default("ONSITE"),

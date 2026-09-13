@@ -36,19 +36,27 @@ type DocItem = {
   student: { id: string; enrollmentNumber: string; firstName: string | null; lastName: string | null };
 };
 
-async function fetchDocs(opts: { search?: string; status?: string; type?: string; page: number }) {
+async function fetchDocs(opts: { search?: string; status?: string; type?: string; page: number; studentId?: string }) {
   const params = new URLSearchParams({
     page: String(opts.page), pageSize: "20",
     ...(opts.search ? { search: opts.search } : {}),
     ...(opts.status ? { status: opts.status } : {}),
     ...(opts.type ? { type: opts.type } : {}),
+    ...(opts.studentId ? { studentId: opts.studentId } : {}),
   });
   const res = await fetch(`/api/admin/documents?${params}`);
   if (!res.ok) throw new Error("Failed to fetch");
   return res.json() as Promise<{ items: DocItem[]; total: number; totalPages: number }>;
 }
 
-export function AdminDocumentsClient() {
+interface AdminDocumentsClientProps {
+  /** Scope the list to one student's documents — used by the admin
+   *  student-detail page (Phase 17 P5). Hides the student search bar,
+   *  which is redundant once already scoped to a single student. */
+  studentId?: string;
+}
+
+export function AdminDocumentsClient({ studentId }: AdminDocumentsClientProps = {}) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -58,8 +66,8 @@ export function AdminDocumentsClient() {
   const [adminNote, setAdminNote] = useState("");
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["admin-documents", search, statusFilter, typeFilter, page],
-    queryFn: () => fetchDocs({ search, status: statusFilter || undefined, type: typeFilter || undefined, page }),
+    queryKey: ["admin-documents", search, statusFilter, typeFilter, page, studentId],
+    queryFn: () => fetchDocs({ search, status: statusFilter || undefined, type: typeFilter || undefined, page, studentId }),
   });
 
   const verifyMutation = useMutation({
@@ -79,10 +87,12 @@ export function AdminDocumentsClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search student or document..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-        </div>
+        {!studentId && (
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Search student or document..." className="pl-9" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          </div>
+        )}
         <select 
           value={statusFilter} 
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} 

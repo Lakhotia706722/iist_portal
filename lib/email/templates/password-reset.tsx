@@ -15,17 +15,34 @@ interface PasswordResetEmailProps {
   userName: string;
   resetUrl: string;
   expiresInMinutes?: number;
+  /** "reset" (default): existing user asked to reset their password.
+   *  "welcome": a newly provisioned account setting its first password. */
+  variant?: "reset" | "welcome";
 }
 
 export function PasswordResetEmail({
   userName,
   resetUrl,
   expiresInMinutes = 60,
+  variant = "reset",
 }: PasswordResetEmailProps) {
+  const isWelcome = variant === "welcome";
+  const previewText = isWelcome
+    ? "Set up your IIST Placement Portal account"
+    : "Reset your IIST Placement Portal password";
+  const heading = isWelcome ? "Welcome to the IIST Placement Portal" : "Password Reset Request";
+  const intro = isWelcome
+    ? "An account has been created for you on the IIST Placement Portal. Click the button below to set your password and activate your account."
+    : "We received a request to reset your IIST Placement Portal password. Click the button below to set a new password.";
+  const buttonLabel = isWelcome ? "Set Your Password" : "Reset Password";
+  const footerNote = isWelcome
+    ? "If you were not expecting this email, please contact the placement cell."
+    : "If you did not request a password reset, please ignore this email or contact the placement cell if you have concerns.";
+
   return (
     <Html>
       <Head />
-      <Preview>Reset your IIST Placement Portal password</Preview>
+      <Preview>{previewText}</Preview>
       <Body style={{ backgroundColor: "#f4f4f5", fontFamily: "Inter, sans-serif" }}>
         <Container
           style={{
@@ -37,15 +54,13 @@ export function PasswordResetEmail({
           }}
         >
           <Heading style={{ color: "#0f172a", fontSize: "24px", marginBottom: "16px" }}>
-            Password Reset Request
+            {heading}
           </Heading>
           <Text style={{ color: "#475569", fontSize: "16px" }}>
             Hello {userName},
           </Text>
           <Text style={{ color: "#475569", fontSize: "16px" }}>
-            We received a request to reset your IIST Placement Portal password. Click the
-            button below to set a new password. This link expires in {expiresInMinutes}{" "}
-            minutes.
+            {intro} This link expires in {expiresInMinutes} minutes.
           </Text>
           <Section style={{ textAlign: "center", margin: "32px 0" }}>
             <Button
@@ -60,12 +75,11 @@ export function PasswordResetEmail({
                 textDecoration: "none",
               }}
             >
-              Reset Password
+              {buttonLabel}
             </Button>
           </Section>
           <Text style={{ color: "#94a3b8", fontSize: "14px" }}>
-            If you did not request a password reset, please ignore this email or contact
-            the placement cell if you have concerns.
+            {footerNote}
           </Text>
           <Text style={{ color: "#94a3b8", fontSize: "12px", marginTop: "32px" }}>
             IIST Placement Cell · Thiruvananthapuram, Kerala, India

@@ -19,16 +19,29 @@ function Calendar({
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
-        month_caption: "flex justify-center pt-1 relative items-center",
+        // No `relative` here (unlike the common older shadcn boilerplate):
+        // in react-day-picker v9's actual DOM, <nav> is a sibling of
+        // <div class="month">, not nested inside month_caption, so this
+        // element gains nothing from being a positioning context — and
+        // giving it one made it a *positioned* box that (being later in
+        // DOM than <nav>) painted over the nav buttons per CSS stacking
+        // order, making "next/previous month" unclickable in the real UI.
+        // Found via Phase 17 P3's real-browser drive-creation test once
+        // opening/closing dates became required, not by static inspection.
+        month_caption: "flex justify-center pt-1 items-center",
         caption_label: "text-sm font-medium",
         nav: "space-x-1 flex items-center",
         button_previous: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-1"
+          // top-1 anchors these to the (short) caption bar — without it,
+          // an absolutely-positioned element with no `top` falls back to
+          // its static-flow position, which can land well below the
+          // intended caption row.
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-1 top-1"
         ),
         button_next: cn(
           buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-1"
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-1 top-1"
         ),
         month_grid: "w-full border-collapse space-y-1",
         weekdays: "flex",
