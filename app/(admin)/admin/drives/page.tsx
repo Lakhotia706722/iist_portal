@@ -62,8 +62,10 @@ interface Drive {
     slug: string;
     industry: string;
     logoUrl: string | null;
+    isActive: boolean;
   };
   _count: {
+    /** Active job roles only. */
     jobRoles: number;
     applications: number;
     rounds: number;
@@ -432,17 +434,24 @@ export default function DrivesPage() {
                       </DropdownMenuItem>
                       
                       {getAvailableStatusTransitions(drive.status).map(status => {
-                        // Phase 18 P2: an empty published drive is a dead
-                        // end for students — block it here too, not just
-                        // server-side, so the admin sees why up front
-                        // instead of clicking through to an error toast.
-                        const requiresRoles = status === "PUBLISHED" || status === "APPLICATIONS_OPEN";
-                        const blocked = requiresRoles && drive._count.jobRoles === 0;
+                        // Every reason updateDriveStatus() can reject this
+                        // specific transition, mirrored here so the admin
+                        // sees why up front instead of clicking through to
+                        // an error toast. Keep in sync with the two checks
+                        // in updateDriveStatus (drive.service.ts).
+                        const reasons: string[] = [];
+                        if (status === "PUBLISHED" && !drive.company.isActive) {
+                          reasons.push("the company is inactive");
+                        }
+                        if ((status === "PUBLISHED" || status === "APPLICATIONS_OPEN") && drive._count.jobRoles === 0) {
+                          reasons.push("add at least one job role first — an empty drive has nothing for students to apply to");
+                        }
+                        const blocked = reasons.length > 0;
                         return (
                           <DropdownMenuItem
                             key={status}
                             disabled={blocked}
-                            title={blocked ? "Add at least one job role first — an empty drive has nothing for students to apply to." : undefined}
+                            title={blocked ? reasons.map((r) => r.charAt(0).toUpperCase() + r.slice(1)).join("; ") : undefined}
                             onClick={() => !blocked && handleUpdateStatus(drive, status)}
                           >
                             Change to {STATUS_OPTIONS.find(s => s.value === status)?.label}

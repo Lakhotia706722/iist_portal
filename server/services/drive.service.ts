@@ -39,8 +39,10 @@ export type DriveWithDetails = {
     slug: string;
     industry: string;
     logoKey: string | null;
+    isActive: boolean;
   };
   _count: {
+    /** Active job roles only — see the comments on listDrives/getDriveById. */
     jobRoles: number;
     applications: number;
     rounds: number;
@@ -100,11 +102,18 @@ export async function createDrive(data: DriveInput, createdById: string): Promis
           slug: true,
           industry: true,
           logoKey: true,
+          isActive: true,
         },
       },
+      // Phase 18 P2 follow-up: filtered to isActive so this count agrees
+      // with updateDriveStatus's own "at least one active role" check
+      // below — previously counted inactive roles too, so a drive with
+      // roles that were all deactivated could show a nonzero count here
+      // and let the admin UI enable "Publish" for a request the server
+      // would still reject.
       _count: {
         select: {
-          jobRoles: true,
+          jobRoles: { where: { isActive: true } },
           applications: true,
           rounds: true,
         },
@@ -174,11 +183,15 @@ export async function listDrives(filters?: {
             slug: true,
             industry: true,
             logoKey: true,
+            isActive: true,
           },
         },
+        // See the matching comment on getDriveById/createDrive/updateDrive
+        // /updateDriveStatus above — filtered to agree with the actual
+        // "at least one active role" publish gate.
         _count: {
           select: {
-            jobRoles: true,
+            jobRoles: { where: { isActive: true } },
             applications: true,
             rounds: true,
           },
@@ -212,11 +225,18 @@ export async function getDriveById(id: string): Promise<DriveWithDetails> {
           slug: true,
           industry: true,
           logoKey: true,
+          isActive: true,
         },
       },
+      // Phase 18 P2 follow-up: filtered to isActive so this count agrees
+      // with updateDriveStatus's own "at least one active role" check
+      // below — previously counted inactive roles too, so a drive with
+      // roles that were all deactivated could show a nonzero count here
+      // and let the admin UI enable "Publish" for a request the server
+      // would still reject.
       _count: {
         select: {
-          jobRoles: true,
+          jobRoles: { where: { isActive: true } },
           applications: true,
           rounds: true,
         },
@@ -286,11 +306,18 @@ export async function updateDrive(
           slug: true,
           industry: true,
           logoKey: true,
+          isActive: true,
         },
       },
+      // Phase 18 P2 follow-up: filtered to isActive so this count agrees
+      // with updateDriveStatus's own "at least one active role" check
+      // below — previously counted inactive roles too, so a drive with
+      // roles that were all deactivated could show a nonzero count here
+      // and let the admin UI enable "Publish" for a request the server
+      // would still reject.
       _count: {
         select: {
-          jobRoles: true,
+          jobRoles: { where: { isActive: true } },
           applications: true,
           rounds: true,
         },
@@ -363,11 +390,18 @@ export async function updateDriveStatus(
           slug: true,
           industry: true,
           logoKey: true,
+          isActive: true,
         },
       },
+      // Phase 18 P2 follow-up: filtered to isActive so this count agrees
+      // with updateDriveStatus's own "at least one active role" check
+      // below — previously counted inactive roles too, so a drive with
+      // roles that were all deactivated could show a nonzero count here
+      // and let the admin UI enable "Publish" for a request the server
+      // would still reject.
       _count: {
         select: {
-          jobRoles: true,
+          jobRoles: { where: { isActive: true } },
           applications: true,
           rounds: true,
         },
@@ -553,6 +587,7 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
           slug: true,
           industry: true,
           logoKey: true,
+          isActive: true,
         },
       },
       jobRoles: {

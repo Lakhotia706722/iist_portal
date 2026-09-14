@@ -74,8 +74,10 @@ interface DriveDetail {
     slug: string;
     industry: string;
     logoUrl: string | null;
+    isActive: boolean;
   };
   _count: {
+    /** Active job roles only. */
     jobRoles: number;
     applications: number;
     rounds: number;
@@ -343,7 +345,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
           </TabsContent>
 
           <TabsContent value="roles">
-            <DriveJobRoles driveId={drive.id} driveStatus={drive.status} />
+            <DriveJobRoles driveId={drive.id} driveStatus={drive.status} onRolesChanged={fetchDriveDetail} />
           </TabsContent>
 
           <TabsContent value="applications">

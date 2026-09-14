@@ -54,9 +54,18 @@ interface JobRole {
 interface DriveJobRolesProps {
   driveId: string;
   driveStatus: string;
+  /**
+   * Notifies the parent page after a role is created, edited, or deleted —
+   * this component only tracks its own job-roles list, but the parent's
+   * `drive._count.jobRoles` (which the Overview tab's publish checklist
+   * and the drives-list page's disabled-menu-item check both depend on)
+   * would otherwise stay stale until a full page reload. Optional so this
+   * component still works standalone wherever nothing needs to react.
+   */
+  onRolesChanged?: () => void;
 }
 
-export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
+export function DriveJobRoles({ driveId, driveStatus, onRolesChanged }: DriveJobRolesProps) {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -110,6 +119,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
       toast({ title: "Success", description: "Job role deleted" });
       setDeletingRole(null);
       fetchJobRoles();
+      onRolesChanged?.();
     } catch (error) {
       toast({
         title: "Error",
@@ -293,7 +303,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
           </DialogHeader>
           <JobRoleForm
             driveId={driveId}
-            onSuccess={() => { setShowCreateDialog(false); fetchJobRoles(); }}
+            onSuccess={() => { setShowCreateDialog(false); fetchJobRoles(); onRolesChanged?.(); }}
             onCancel={() => setShowCreateDialog(false)}
           />
         </DialogContent>
@@ -310,7 +320,7 @@ export function DriveJobRoles({ driveId, driveStatus }: DriveJobRolesProps) {
             <JobRoleForm
               driveId={driveId}
               role={editingRole}
-              onSuccess={() => { setEditingRole(null); fetchJobRoles(); }}
+              onSuccess={() => { setEditingRole(null); fetchJobRoles(); onRolesChanged?.(); }}
               onCancel={() => setEditingRole(null)}
             />
           )}

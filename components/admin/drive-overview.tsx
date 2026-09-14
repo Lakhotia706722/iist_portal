@@ -6,7 +6,7 @@
 
 "use client";
 
-import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award, AlertTriangle } from "lucide-react";
+import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award, AlertTriangle, Check, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -31,12 +31,29 @@ interface DriveOverviewProps {
     company: {
       name: string;
       industry: string;
+      isActive: boolean;
     };
     _count: {
+      /** Active job roles only. */
       jobRoles: number;
     };
   };
   onUpdate: () => void;
+}
+
+/**
+ * Everything updateDriveStatus() (drive.service.ts) actually checks before
+ * allowing PUBLISHED or APPLICATIONS_OPEN — kept in sync with that
+ * function and with the same two checks mirrored in the drives list
+ * page's disabled-menu-item tooltip, so there's exactly one place per
+ * layer that has to agree with the real gate, not three copies drifting
+ * apart.
+ */
+function publishConditions(drive: DriveOverviewProps["drive"]): { label: string; met: boolean }[] {
+  return [
+    { label: "Add at least one active job role", met: drive._count.jobRoles > 0 },
+    { label: "Company is active", met: drive.company.isActive },
+  ];
 }
 
 /**
@@ -45,16 +62,14 @@ interface DriveOverviewProps {
  * with an applicationOpenAt still in the future, is correct, intentional
  * behavior (a scheduled drive, or one an admin hasn't finished setting
  * up) — but until now there was no way for an admin looking at this page
- * to know *why* students see nothing. One banner, most-relevant case
- * first; returns null once nothing is actually wrong.
+ * to know *why* students see nothing. Below "Applications Open": a
+ * checklist of what's actually blocking Publish (each condition mirrors
+ * publishConditions() above, live — no refresh needed once satisfied, the
+ * same props update that flips _count.jobRoles re-renders this). At or
+ * past "Applications Open": a single most-relevant sentence, since the
+ * checklist no longer applies.
  */
 function visibilityBanner(drive: DriveOverviewProps["drive"]): string | null {
-  if (drive.status === "DRAFT") {
-    return "This drive is still a draft — students can't see it. Publish it, then set it to Applications Open, to make it visible.";
-  }
-  if (drive.status === "PUBLISHED") {
-    return "This drive is published but not yet open for applications — students won't see it until you change its status to Applications Open.";
-  }
   if (drive.status !== "APPLICATIONS_OPEN") return null;
   if (drive._count.jobRoles === 0) {
     return "This drive has no job roles yet — even though applications are open, there's nothing for a student to see or apply to. Add a job role.";
@@ -84,9 +99,39 @@ export function DriveOverview({ drive, onUpdate }: DriveOverviewProps) {
   };
 
   const banner = visibilityBanner(drive);
+  const isPrePublish = drive.status === "DRAFT" || drive.status === "PUBLISHED";
+  const conditions = isPrePublish ? publishConditions(drive) : [];
+  const unmetCount = conditions.filter((c) => !c.met).length;
 
   return (
     <div className="space-y-6">
+      {isPrePublish && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="font-medium">
+              {drive.status === "DRAFT"
+                ? "This drive is still a draft — students can't see it."
+                : "This drive is published but not yet open for applications — students won't see it yet."}
+              {unmetCount > 0 ? " Before publishing:" : " Ready to move to Applications Open."}
+            </span>
+          </div>
+          {unmetCount > 0 && (
+            <ul className="mt-2 ml-6 space-y-1">
+              {conditions.map((c) => (
+                <li key={c.label} className="flex items-center gap-1.5">
+                  {c.met ? (
+                    <Check className="h-3.5 w-3.5 shrink-0 text-green-600 dark:text-green-400" />
+                  ) : (
+                    <X className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                  )}
+                  <span className={c.met ? "text-muted-foreground line-through" : ""}>{c.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {banner && (
         <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

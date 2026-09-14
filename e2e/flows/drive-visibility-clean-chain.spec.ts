@@ -165,7 +165,7 @@ test("Full chain (2/2): a real student sees it, searches for it, and completes t
   await prisma.company.deleteMany({ where: { name: COMPANY_NAME } });
 });
 
-test("Publishing a drive with zero job roles is blocked, both the menu item and the API", async ({ page }) => {
+test("Publishing with zero job roles is blocked with a visible reason, becomes enabled the moment a role is added", async ({ page }) => {
   const COMPANY = `P2 ZeroRole Co ${RUN}`;
   const DRIVE = `P2 ZeroRole Drive ${RUN}`;
   await prisma.company.deleteMany({ where: { name: COMPANY } });
@@ -190,10 +190,13 @@ test("Publishing a drive with zero job roles is blocked, both the menu item and 
 
   const drive = await prisma.placementDrive.findFirstOrThrow({ where: { title: DRIVE } });
 
-  // The "Change to Published" menu item is disabled — no job roles yet.
+  // The "Change to Published" menu item is disabled with a visible reason
+  // (a title/tooltip) — not silently blocked.
   const driveRow = page.locator(".cursor-pointer", { hasText: DRIVE });
   await driveRow.getByRole("button").last().click();
-  await expect(page.getByRole("menuitem", { name: /change to published/i })).toBeDisabled();
+  const publishItem = page.getByRole("menuitem", { name: /change to published/i });
+  await expect(publishItem).toBeDisabled();
+  await expect(publishItem).toHaveAttribute("title", /add at least one job role/i);
 
   // Belt-and-suspenders: the API itself refuses the transition even if
   // called directly, not just a client-side-only guard.
@@ -204,6 +207,36 @@ test("Publishing a drive with zero job roles is blocked, both the menu item and 
   const body = await res.json();
   expect(body.error).toMatch(/job role/i);
 
+  // The drive Overview tab shows the same reason as an explicit checklist.
+  await page.goto(`/admin/drives/${drive.id}`);
+  await expect(page.getByText(/still a draft/i)).toBeVisible();
+  await expect(page.getByText(/add at least one active job role/i)).toBeVisible();
+
+  // Add a role through the real UI — no manual reload anywhere below.
+  await page.getByRole("tab", { name: /roles/i }).click();
+  await page.getByRole("button", { name: /add job role/i }).first().click();
+  await page.getByLabel(/role title/i).fill("ZeroRole Fixed Engineer");
+  await page.getByRole("dialog").getByRole("button", { name: /^create role$/i }).click();
+  await expect(page.getByText("ZeroRole Fixed Engineer")).toBeVisible({ timeout: 15_000 });
+
+  // Overview tab's checklist flips live: no unmet conditions left, so it
+  // collapses to the "ready" message instead of listing anything.
+  await page.getByRole("tab", { name: /overview/i }).click();
+  await expect(page.getByText(/ready to move to applications open/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/add at least one active job role/i)).toHaveCount(0);
+
+  // Back on the drives list (a real navigation, not a page.reload()), the
+  // menu item is enabled now — proving the earlier disabled state wasn't
+  // stuck on stale data.
+  await page.goto("/admin/drives");
+  await page.getByPlaceholder(/search drives/i).fill(DRIVE);
+  await expect(page.getByText(DRIVE)).toBeVisible({ timeout: 15_000 });
+  await driveRow.getByRole("button").last().click();
+  await expect(page.getByRole("menuitem", { name: /change to published/i })).toBeEnabled();
+  await page.getByRole("menuitem", { name: /change to published/i }).click();
+  await expect(page.getByText(/^published$/i).first()).toBeVisible({ timeout: 15_000 });
+
+  await prisma.jobRole.deleteMany({ where: { driveId: drive.id } });
   await prisma.placementDrive.delete({ where: { id: drive.id } });
   await prisma.company.deleteMany({ where: { name: COMPANY } });
 });
