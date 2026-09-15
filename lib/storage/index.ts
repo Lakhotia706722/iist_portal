@@ -8,6 +8,7 @@
 
 import { LocalStorageAdapter } from "./local-adapter";
 import { S3StorageAdapter } from "./s3-adapter";
+import { VercelBlobStorageAdapter } from "./vercel-blob-adapter";
 
 export interface StorageAdapter {
   /** Store bytes under `key`. Returns the key. */
@@ -27,7 +28,10 @@ export function getStorageAdapter(): StorageAdapter {
   if (cached) return cached;
 
   const driver = process.env.STORAGE_DRIVER ?? "local";
-  cached = driver === "s3" ? new S3StorageAdapter() : new LocalStorageAdapter();
+  cached =
+    driver === "s3" ? new S3StorageAdapter() :
+    driver === "vercel-blob" ? new VercelBlobStorageAdapter() :
+    new LocalStorageAdapter();
   return cached;
 }
 
