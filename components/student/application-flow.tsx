@@ -369,7 +369,7 @@ export function ApplicationFlow({
                 <div className="flex gap-2">
                   {resumes.length === 0 && (
                     <Button variant="outline" asChild>
-                      <a href="/student/resumes" target="_blank">
+                      <a href="/student/resume" target="_blank">
                         <Upload className="h-4 w-4 mr-2" />
                         Upload Resume
                       </a>
