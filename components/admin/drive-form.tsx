@@ -143,7 +143,13 @@ export function DriveForm({ drive, onSuccess, onCancel }: DriveFormProps) {
 
   const fetchCompanies = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/companies?isActive=true");
+      // Phase 20: this endpoint defaults to a 20-item page with no way for
+      // a dropdown to page through the rest — a company sorted past that
+      // (increasingly likely as real usage accumulates companies) was
+      // simply never selectable here. limit=200 matches the same
+      // "dropdown wants the whole list, not a page of it" convention
+      // already used for the company picker in users-roles-client.tsx.
+      const response = await fetch("/api/admin/companies?isActive=true&limit=200");
       if (!response.ok) throw new Error("Failed to fetch companies");
 
       const data = await response.json();

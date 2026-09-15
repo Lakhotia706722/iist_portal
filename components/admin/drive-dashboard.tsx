@@ -9,19 +9,29 @@ import { useToast } from "@/hooks/use-toast";
 import { RefreshCw, Users, Target, TrendingUp, Award } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Mirrors ComprehensiveDriveAnalytics from server/services/drive-dashboard.service.ts —
+// the fictional `DashboardData` shape this component was originally written against
+// (funnel.totalApplications, byBranch as an array, etc.) was never actually returned
+// by any API route, so every render of this tab threw immediately. This type now
+// matches what GET /api/admin/drives/[id]/dashboard actually sends.
 interface DashboardData {
   funnel: {
-    totalApplications: number;
+    applications: number;
     shortlisted: number;
-    roundsCompleted: number;
-    offered: number;
-    accepted: number;
+    inProgress: number;
+    selected: number;
   };
-  byBranch: Array<{ branch: string; count: number; shortlisted: number }>;
-  byGender: Array<{ gender: string; count: number }>;
-  byJobRole: Array<{ role: string; applications: number; shortlisted: number }>;
-  avgCgpa: number | null;
-  applicationTimeline: Array<{ date: string; count: number }>;
+  distribution: {
+    byBranch: Record<string, { applications: number; shortlisted: number }>;
+    byGender: Record<string, { applications: number }>;
+    byCgpaBand: Record<string, { applications: number; avgCgpa: number }>;
+  };
+  jobRoles: {
+    byJobRole: Record<string, { title: string; applications: number; shortlisted: number }>;
+  };
+  timeline: {
+    dailyApplications: Array<{ date: string; count: number }>;
+  };
 }
 
 interface Props { driveId: string }
@@ -81,7 +91,7 @@ export function DriveDashboard({ driveId }: Props) {
       const res = await fetch(`/api/admin/drives/${driveId}/dashboard`);
       if (!res.ok) throw new Error();
       const d = await res.json();
-      setData(d.dashboard ?? d);
+      setData(d.analytics);
     } catch {
       toast({ title: "Error", description: "Failed to load dashboard.", variant: "destructive" });
     } finally {
@@ -98,10 +108,19 @@ export function DriveDashboard({ driveId }: Props) {
     <div className="text-center py-16 text-muted-foreground">No analytics data available yet.</div>
   );
 
-  const total = data.funnel.totalApplications;
-  const maxBranch = Math.max(...data.byBranch.map(b => b.count), 1);
-  const maxRole = Math.max(...data.byJobRole.map(r => r.applications), 1);
-  const maxTimeline = Math.max(...(data.applicationTimeline?.map(t => t.count) ?? [1]), 1);
+  const total = data.funnel.applications;
+  const byBranch = Object.entries(data.distribution.byBranch).map(([branch, v]) => ({ branch, count: v.applications, shortlisted: v.shortlisted }));
+  const byGender = Object.entries(data.distribution.byGender).map(([gender, v]) => ({ gender, count: v.applications }));
+  const byJobRole = Object.values(data.jobRoles.byJobRole).map(v => ({ role: v.title, applications: v.applications, shortlisted: v.shortlisted }));
+  const cgpaBands = Object.entries(data.distribution.byCgpaBand).filter(([band]) => band !== "No Data");
+  const cgpaApplicantCount = cgpaBands.reduce((sum, [, v]) => sum + v.applications, 0);
+  const avgCgpa = cgpaApplicantCount > 0
+    ? cgpaBands.reduce((sum, [, v]) => sum + v.avgCgpa * v.applications, 0) / cgpaApplicantCount
+    : null;
+  const applicationTimeline = data.timeline.dailyApplications;
+  const maxBranch = Math.max(...byBranch.map(b => b.count), 1);
+  const maxRole = Math.max(...byJobRole.map(r => r.applications), 1);
+  const maxTimeline = Math.max(...(applicationTimeline.map(t => t.count) ?? [1]), 1);
 
   return (
     <div className="space-y-6">
@@ -121,8 +140,8 @@ export function DriveDashboard({ driveId }: Props) {
         {[
           { label: "Total Applications", value: total, icon: Users, bg: "bg-blue-50 text-blue-600" },
           { label: "Shortlisted",        value: data.funnel.shortlisted, icon: Target, bg: "bg-green-50 text-green-600" },
-          { label: "Offers Made",        value: data.funnel.offered,     icon: Award, bg: "bg-violet-50 text-violet-600" },
-          { label: "Avg CGPA",           value: data.avgCgpa?.toFixed(2) ?? "—", icon: TrendingUp, bg: "bg-amber-50 text-amber-600" },
+          { label: "Selected",           value: data.funnel.selected,    icon: Award, bg: "bg-violet-50 text-violet-600" },
+          { label: "Avg CGPA",           value: avgCgpa?.toFixed(2) ?? "—", icon: TrendingUp, bg: "bg-amber-50 text-amber-600" },
         ].map(kpi => (
           <Card key={kpi.label}>
             <CardContent className="p-5 flex items-center justify-between">
@@ -148,9 +167,8 @@ export function DriveDashboard({ driveId }: Props) {
           <CardContent className="divide-y">
             <FunnelStep label="Total Applied"     value={total}                        total={total} icon={Users}      color="bg-blue-50 text-blue-600" />
             <FunnelStep label="Shortlisted"       value={data.funnel.shortlisted}      total={total} icon={Target}     color="bg-green-50 text-green-600" />
-            <FunnelStep label="Rounds Completed"  value={data.funnel.roundsCompleted}  total={total} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
-            <FunnelStep label="Offers Made"       value={data.funnel.offered}          total={total} icon={Award}      color="bg-violet-50 text-violet-600" />
-            <FunnelStep label="Accepted"          value={data.funnel.accepted}         total={total} icon={Award}      color="bg-emerald-50 text-emerald-600" />
+            <FunnelStep label="In Rounds"         value={data.funnel.inProgress}       total={total} icon={TrendingUp} color="bg-amber-50 text-amber-600" />
+            <FunnelStep label="Selected"          value={data.funnel.selected}         total={total} icon={Award}      color="bg-violet-50 text-violet-600" />
           </CardContent>
         </Card>
 
@@ -161,9 +179,9 @@ export function DriveDashboard({ driveId }: Props) {
             <CardDescription>Applications &amp; shortlists per branch</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {data.byBranch.length === 0 ? (
+            {byBranch.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No data yet.</p>
-            ) : data.byBranch.map(b => (
+            ) : byBranch.map(b => (
               <div key={b.branch} className="space-y-1">
                 <BarRow label={b.branch} value={b.count} max={maxBranch} cls="bg-blue-500" />
                 {b.shortlisted > 0 && (
@@ -183,13 +201,13 @@ export function DriveDashboard({ driveId }: Props) {
             <CardDescription>Applicant gender breakdown</CardDescription>
           </CardHeader>
           <CardContent>
-            {data.byGender.length === 0 ? (
+            {byGender.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No data yet.</p>
             ) : (
               <div className="space-y-4">
                 {(() => {
-                  const gTotal = data.byGender.reduce((s, g) => s + g.count, 0);
-                  return data.byGender.map(g => (
+                  const gTotal = byGender.reduce((s, g) => s + g.count, 0);
+                  return byGender.map(g => (
                     <BarRow key={g.gender} label={g.gender} value={g.count} max={gTotal}
                       sub={`${((g.count / gTotal) * 100).toFixed(1)}%`}
                       cls={g.gender === "MALE" ? "bg-blue-500" : g.gender === "FEMALE" ? "bg-pink-500" : "bg-gray-400"} />
@@ -207,9 +225,9 @@ export function DriveDashboard({ driveId }: Props) {
             <CardDescription>Applications vs shortlisted per role</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {data.byJobRole.length === 0 ? (
+            {byJobRole.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">No data yet.</p>
-            ) : data.byJobRole.map(r => (
+            ) : byJobRole.map(r => (
               <div key={r.role} className="space-y-1">
                 <BarRow label={r.role} value={r.applications} max={maxRole} cls="bg-primary/70" />
                 {r.shortlisted > 0 && (
@@ -224,7 +242,7 @@ export function DriveDashboard({ driveId }: Props) {
       </div>
 
       {/* Application Timeline */}
-      {data.applicationTimeline && data.applicationTimeline.length > 0 && (
+      {applicationTimeline && applicationTimeline.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Application Timeline</CardTitle>
@@ -232,7 +250,7 @@ export function DriveDashboard({ driveId }: Props) {
           </CardHeader>
           <CardContent>
             <div className="flex items-end gap-1 h-28 overflow-x-auto pb-1">
-              {data.applicationTimeline.map(t => {
+              {applicationTimeline.map(t => {
                 const pct = Math.round((t.count / maxTimeline) * 100);
                 return (
                   <div key={t.date} className="flex flex-col items-center gap-1 flex-1 min-w-[28px]">

@@ -81,14 +81,18 @@ const INDUSTRY_OPTIONS = [
   { value: "OTHER", label: "Other" },
 ];
 
+const PAGE_SIZE = 20;
+
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [pagination, setPagination] = useState<{ total: number; hasMore: boolean }>({ total: 0, hasMore: false });
   const [stats, setStats] = useState<CompanyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [page, setPage] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -96,11 +100,21 @@ export default function CompaniesPage() {
 
   const { toast } = useToast();
 
+  // Phase 20 — root cause of a real "company doesn't appear after
+  // creation" report: this page had no pagination at all, relying on the
+  // API's default 20-item page with no way to reach anything past it. A
+  // newly-created company sorted alphabetically past the 20th active one
+  // (a near-certainty as the real company list grows) was completely
+  // invisible here — and in the drive-creation dropdown, which queries
+  // this exact same endpoint. Sorting newest-first (company.service.ts)
+  // means a fresh company always lands on page one; this pagination is
+  // what makes everything else actually reachable rather than silently
+  // capped at the first 20.
   const fetchCompanies = useCallback(async () => {
     try {
       setLoading(true);
       setError(false);
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
 
       if (searchQuery) params.set("search", searchQuery);
       if (industryFilter !== "all") params.set("industry", industryFilter);
@@ -112,6 +126,7 @@ export default function CompaniesPage() {
 
       const data = await response.json();
       setCompanies(data.companies);
+      setPagination({ total: data.pagination.total, hasMore: data.pagination.hasMore });
       setStats(data.stats);
     } catch (err) {
       // Phase 11: this only ever showed a toast (which auto-dismisses)
@@ -134,11 +149,18 @@ export default function CompaniesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, industryFilter, statusFilter, toast]);
+  }, [searchQuery, industryFilter, statusFilter, page, toast]);
 
   useEffect(() => {
     fetchCompanies();
   }, [fetchCompanies]);
+
+  // A filter change makes the current page number meaningless against the
+  // new result set — back to page one, same convention as
+  // students-directory-client.tsx.
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, industryFilter, statusFilter]);
 
   const handleCreateCompany = () => {
     setSelectedCompany(null);
@@ -213,26 +235,22 @@ export default function CompaniesPage() {
   };
 
   const handleCompanySubmit = async () => {
+    // A newly-created company always sorts to page one now (newest-first
+    // — see the comment on fetchCompanies), but only actually lands there
+    // for the admin if they're not sitting on some other page already.
+    const wasCreating = showCreateDialog;
     setShowCreateDialog(false);
     setShowEditDialog(false);
-    await fetchCompanies();
+    if (wasCreating && page !== 0) {
+      setPage(0);
+    } else {
+      await fetchCompanies();
+    }
   };
 
   const getIndustryLabel = (industry: string) => {
     return INDUSTRY_OPTIONS.find(opt => opt.value === industry)?.label || industry;
   };
-
-  const filteredCompanies = companies.filter(company => {
-    const matchesSearch = !searchQuery || 
-      company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      company.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesIndustry = industryFilter === "all" || company.industry === industryFilter;
-    const matchesStatus = statusFilter === "all" || 
-      (statusFilter === "true" ? company.isActive : !company.isActive);
-
-    return matchesSearch && matchesIndustry && matchesStatus;
-  });
 
   if (loading) {
     return (
@@ -313,8 +331,10 @@ export default function CompaniesPage() {
         </CardContent>
       </Card>
 
-      {/* Companies Grid */}
-      {filteredCompanies.length === 0 ? (
+      {/* Companies Grid — search/industry/status are already applied
+          server-side (fetchCompanies' query params); no client-side
+          re-filter here, so what's on screen always matches `pagination`. */}
+      {companies.length === 0 ? (
         <EmptyState
           icon={Building2}
           title="No companies found"
@@ -326,7 +346,7 @@ export default function CompaniesPage() {
         />
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredCompanies.map((company) => (
+          {companies.map((company) => (
             <Card key={company.id} className="relative">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -423,6 +443,16 @@ export default function CompaniesPage() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {pagination.total > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{pagination.total} compan{pagination.total === 1 ? "y" : "ies"} total</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={!pagination.hasMore} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          </div>
         </div>
       )}
 

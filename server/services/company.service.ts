@@ -93,11 +93,22 @@ export async function listCompanies(filters?: {
   if (filters?.industry) where.industry = filters.industry;
   if (filters?.isActive !== undefined) where.isActive = filters.isActive;
 
+  // Phase 20 — newest first (within active/inactive), not alphabetical:
+  // this endpoint's default limit is 20, and before this fix the admin
+  // Companies page had no pagination UI at all, so a company sorted
+  // alphabetically past the 20th active one (a near-certainty once real
+  // usage accumulates more than a couple dozen companies) was completely
+  // invisible — including in the drive-creation dropdown, which hits this
+  // same query — right after being created, with no indication anything
+  // had gone wrong. Sorting newest-first means a just-created company is
+  // always on page one regardless of its name; real pagination (now added
+  // to the admin page itself) is what makes everything beyond that
+  // actually reachable.
   const [companies, total] = await Promise.all([
     prisma.company.findMany({
       where,
       include: companyInclude,
-      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
       skip: filters?.offset || 0,
       take: filters?.limit || 50,
     }),
