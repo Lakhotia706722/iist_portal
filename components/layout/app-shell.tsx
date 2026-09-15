@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import {
@@ -38,13 +39,23 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const navGroups = getNavGroups(role);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidebar navGroups={navGroups} />
+      <Sidebar
+        navGroups={navGroups}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
+      />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar userName={userName} userRole={userRole} userEmail={userEmail} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <Topbar
+          userName={userName}
+          userRole={userRole}
+          userEmail={userEmail}
+          onMenuClick={() => setMobileNavOpen(true)}
+        />
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

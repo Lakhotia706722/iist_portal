@@ -379,7 +379,11 @@ export default function DrivesPage() {
       ) : (
         <div className="space-y-4">
           {drives.map((drive) => (
-            <Card key={drive.id} className="cursor-pointer hover:shadow-md transition-shadow">
+            <Card
+              key={drive.id}
+              className="cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => handleViewDrive(drive)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3">
@@ -412,11 +416,12 @@ export default function DrivesPage() {
                         variant="ghost"
                         size="sm"
                         disabled={actionLoading === drive.id}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenuItem onClick={() => handleViewDrive(drive)}>
                         View Details
                       </DropdownMenuItem>

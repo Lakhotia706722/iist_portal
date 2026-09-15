@@ -1,6 +1,6 @@
 "use client";
 import { signOut } from "next-auth/react";
-import { ChevronDown, LogOut, Settings, User } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Settings, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getInitials } from "@/lib/utils";
 import { useState } from "react";
@@ -12,6 +12,7 @@ interface TopbarProps {
   userName: string;
   userRole: string;
   userEmail: string;
+  onMenuClick?: () => void;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -22,14 +23,27 @@ const ROLE_LABELS: Record<string, string> = {
   COMPANY_REP: "Company Representative",
 };
 
-export function Topbar({ userName, userRole, userEmail }: TopbarProps) {
+export function Topbar({ userName, userRole, userEmail, onMenuClick }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 gap-4">
-      {/* Global search — staff roles only */}
+    <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-3 sm:px-4 gap-2 sm:gap-4">
+      {/* Hamburger — opens the mobile nav drawer; desktop keeps the persistent sidebar */}
+      <button
+        onClick={onMenuClick}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors md:hidden"
+        aria-label="Open menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      {/* Global search — staff roles only; hidden on the narrowest screens
+          where there's no room for it alongside the hamburger, bell and
+          avatar without everything overflowing. */}
       {(userRole === "TP_ADMIN" || userRole === "HOD" || userRole === "FACULTY") && (
-        <GlobalSearch />
+        <div className="hidden min-w-0 sm:block sm:max-w-[220px] md:max-w-sm">
+          <GlobalSearch />
+        </div>
       )}
 
       {/* Spacer */}
