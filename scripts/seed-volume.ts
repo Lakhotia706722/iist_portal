@@ -75,12 +75,15 @@ async function main() {
   const company = await prisma.company.create({
     data: { name: "E2E Volume Co", slug: `e2e-volume-co-${Date.now()}`, industry: "TECHNOLOGY", isActive: true },
   });
+  // Phase 19: "applications closed" is derived from PUBLISHED + a past
+  // applicationCloseAt now — see hasApplicationsClosed() in lib/drive-status.ts.
   const drive = await prisma.placementDrive.create({
     data: {
       companyId: company.id,
       title: "E2E Volume Drive",
       academicYear: "2025-2026",
-      status: "APPLICATIONS_CLOSED",
+      status: "PUBLISHED",
+      applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000),
       createdById: admin.id,
     },
   });

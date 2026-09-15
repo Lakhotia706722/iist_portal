@@ -8,6 +8,7 @@
 import { prisma } from "@/lib/prisma";
 import { JobRoleInput, EligibilityRuleInput } from "@/lib/validations/placement";
 import { NotFoundError, ValidationError } from "@/lib/errors";
+import { hasApplicationWindowStarted } from "@/lib/drive-status";
 
 export type JobRoleWithDetails = {
   id: string;
@@ -193,15 +194,17 @@ export async function updateJobRole(
 ): Promise<JobRoleWithDetails> {
   const existing = await prisma.jobRole.findUnique({
     where: { id },
-    include: { drive: { select: { status: true } } },
+    include: { drive: { select: { status: true, applicationOpenAt: true, applicationCloseAt: true } } },
   });
 
   if (!existing) {
     throw new NotFoundError("Job role not found");
   }
 
-  // Prevent editing if drive has started accepting applications
-  if (["APPLICATIONS_OPEN", "ONGOING", "COMPLETED"].includes(existing.drive.status)) {
+  // Prevent editing if drive has started accepting applications — Phase
+  // 19: "started" is now derived from the date window once PUBLISHED,
+  // not a literal APPLICATIONS_OPEN status.
+  if (hasApplicationWindowStarted(existing.drive)) {
     throw new ValidationError("Cannot edit job role after applications open");
   }
 

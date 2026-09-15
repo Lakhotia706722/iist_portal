@@ -123,7 +123,7 @@ test("Offers: joining date before the offer date is rejected", async ({ page }) 
   const student = await prisma.student.create({ data: { userId: user.id, enrollmentNumber: `E2ENEG${Date.now()}`, branchId: branch.id, batchId: batch.id, onboardingStep: 2, firstName: "Join", lastName: "Date" } });
   const company = await prisma.company.create({ data: { name: `E2E Negpath JD Co ${Date.now()}`, slug: `e2e-negpath-jd-${Date.now()}`, industry: "TECHNOLOGY", isActive: true } });
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: ACCOUNTS.admin.email } });
-  const drive = await prisma.placementDrive.create({ data: { companyId: company.id, title: `E2E Negpath JD Drive ${Date.now()}`, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin.id } });
+  const drive = await prisma.placementDrive.create({ data: { companyId: company.id, title: `E2E Negpath JD Drive ${Date.now()}`, academicYear: "2025-2026", status: "PUBLISHED", createdById: admin.id } });
   const role = await prisma.jobRole.create({ data: { driveId: drive.id, title: "E2E Negpath JD Role" } });
   const application = await prisma.application.create({ data: { studentId: student.id, driveId: drive.id, jobRoleId: role.id, status: "SELECTED" } });
 
@@ -156,7 +156,7 @@ test("Offers: exceeding the max-active-offers-per-student policy is rejected", a
 
   const company = await prisma.company.create({ data: { name: `E2E Negpath Co ${Date.now()}`, slug: `e2e-negpath-co-${Date.now()}`, industry: "TECHNOLOGY", isActive: true } });
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: ACCOUNTS.admin.email } });
-  const drive = await prisma.placementDrive.create({ data: { companyId: company.id, title: `E2E Negpath Drive ${Date.now()}`, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin.id } });
+  const drive = await prisma.placementDrive.create({ data: { companyId: company.id, title: `E2E Negpath Drive ${Date.now()}`, academicYear: "2025-2026", status: "PUBLISHED", createdById: admin.id } });
   const roleA = await prisma.jobRole.create({ data: { driveId: drive.id, title: "E2E Negpath Role A" } });
   const roleB = await prisma.jobRole.create({ data: { driveId: drive.id, title: "E2E Negpath Role B" } });
 

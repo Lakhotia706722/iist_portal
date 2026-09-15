@@ -47,8 +47,10 @@ test("CSV shortlist upload: real .csv file through the UI, mixed shortlist/rejec
   const company = await prisma.company.create({
     data: { name: COMPANY_NAME, slug: `e2e-csv-shortlist-${Date.now()}`, industry: "TECHNOLOGY", isActive: true },
   });
+  // Phase 19: "applications closed" is derived from PUBLISHED + a past
+  // applicationCloseAt now — see hasApplicationsClosed() in lib/drive-status.ts.
   const drive = await prisma.placementDrive.create({
-    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: adminUser.id },
+    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "PUBLISHED", applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000), createdById: adminUser.id },
   });
   const jobRole = await prisma.jobRole.create({
     data: { driveId: drive.id, title: ROLE_TITLE },

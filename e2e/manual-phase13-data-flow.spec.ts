@@ -147,16 +147,16 @@ test("1 — Admin: forced password change on first login, then creates Company +
   const rules = await prisma.eligibilityRule.findMany({ where: { jobRole: { title: ROLE_TITLE, driveId: drive.id } } });
   expect(rules).toHaveLength(2);
 
-  // Publish -> Applications Open, so a student can actually apply.
+  // Publish, so a student can actually apply. Phase 19: "Applications
+  // Open" is now a derived label, not a second status to click into — the
+  // drive's window is already in range (opens today), so it shows
+  // immediately after this one step.
   await page.goto("/admin/drives");
   await page.getByPlaceholder(/search drives/i).fill(DRIVE_TITLE);
   const driveRow = page.locator(".cursor-pointer", { hasText: DRIVE_TITLE });
   await driveRow.getByRole("button").last().click();
   await page.getByRole("menuitem", { name: /change to published/i }).click();
-  await expect(page.getByText(/^published$/i).first()).toBeVisible({ timeout: 15_000 });
-  await driveRow.getByRole("button").last().click();
-  await page.getByRole("menuitem", { name: /applications open/i }).click();
-  await expect(page.getByText(/applications open/i).first()).toBeVisible({ timeout: 15_000 });
+  await expect(driveRow.getByText(/^applications open$/i)).toBeVisible({ timeout: 15_000 });
 
   // Admin also creates Faculty + HOD (CSE) accounts through the real Users
   // & Roles page — otherwise there's no way for either to exist on a
@@ -322,7 +322,9 @@ test("3 — Admin: sees the real application, shortlists, runs a round, marks at
   await page.getByRole("tab", { name: /applicants|applications/i }).click();
   await expect(page.getByText("Anjali Krishnan")).toBeVisible({ timeout: 15_000 });
 
-  await prisma.placementDrive.update({ where: { id: drive.id }, data: { status: "APPLICATIONS_CLOSED" } });
+  // Phase 19: "applications closed" is derived from PUBLISHED + a past
+  // applicationCloseAt now — see hasApplicationsClosed() in lib/drive-status.ts.
+  await prisma.placementDrive.update({ where: { id: drive.id }, data: { applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000) } });
 
   await page.goto(`/admin/drives/${drive.id}`);
   await page.getByRole("tab", { name: /shortlisting/i }).click();

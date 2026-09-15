@@ -11,6 +11,11 @@ export const INDUSTRY_TYPES = [
 
 export const WORK_MODES = ["ONSITE", "REMOTE", "HYBRID"] as const;
 
+// Matches the DriveStatus enum in prisma/schema.prisma exactly (including
+// APPLICATIONS_OPEN/APPLICATIONS_CLOSED, which Phase 19 retired as
+// reachable transitions — see STATUS_MACHINE in drive.service.ts, the
+// actual gate — but which the enum still needs to validate any surviving
+// historical value against).
 export const DRIVE_STATUSES = [
   "DRAFT", "PUBLISHED", "APPLICATIONS_OPEN", "APPLICATIONS_CLOSED",
   "ONGOING", "COMPLETED", "CANCELLED",

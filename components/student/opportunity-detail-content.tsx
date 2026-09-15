@@ -39,7 +39,7 @@ interface OpportunityData {
   applicationCloseAt: string | null;
   driveStartDate: string | null;
   driveEndDate: string | null;
-  timeStatus: "active" | "closing_soon" | "closed";
+  timeStatus: "not_open_yet" | "active" | "closing_soon" | "closed";
   timeRemaining: number | null;
   jobRoles: Array<{
     id: string;
@@ -229,6 +229,26 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
 
         {/* Opportunity Header */}
         <OpportunityHeader opportunity={opportunity} />
+
+        {/* Alert for not yet open — reachable via a direct/bookmarked link
+            even though the Opportunities list itself hides these. */}
+        {opportunity.timeStatus === "not_open_yet" && (
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-blue-800">Applications Not Open Yet</h3>
+                  <p className="text-sm text-blue-700">
+                    {opportunity.timeRemaining
+                      ? `Applications open in ${opportunity.timeRemaining} ${opportunity.timeRemaining === 1 ? "day" : "days"}.`
+                      : "Applications haven't opened yet."}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Alert for closing soon */}
         {opportunity.timeStatus === "closing_soon" && (

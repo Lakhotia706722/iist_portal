@@ -12,7 +12,6 @@ import { Plus, Search, Filter, Calendar, Building2, Users, MoreHorizontal } from
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   Select, 
@@ -40,6 +39,8 @@ import { DriveForm } from "@/components/admin/drive-form";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
+import { hasApplicationsClosed, isAcceptingApplications } from "@/lib/drive-status";
 
 interface Drive {
   id: string;
@@ -72,14 +73,16 @@ interface Drive {
   };
 }
 
+// Phase 19: APPLICATIONS_OPEN/APPLICATIONS_CLOSED removed — "is this
+// drive currently accepting applications" is now derived from PUBLISHED +
+// its dates (DriveStatusBadge, lib/drive-status.ts) rather than a
+// separate status an admin filters or transitions into directly.
 const STATUS_OPTIONS = [
-  { value: "DRAFT", label: "Draft", color: "gray" },
-  { value: "PUBLISHED", label: "Published", color: "blue" },
-  { value: "APPLICATIONS_OPEN", label: "Applications Open", color: "green" },
-  { value: "APPLICATIONS_CLOSED", label: "Applications Closed", color: "yellow" },
-  { value: "ONGOING", label: "Ongoing", color: "orange" },
-  { value: "COMPLETED", label: "Completed", color: "purple" },
-  { value: "CANCELLED", label: "Cancelled", color: "red" },
+  { value: "DRAFT", label: "Draft" },
+  { value: "PUBLISHED", label: "Published" },
+  { value: "ONGOING", label: "Ongoing" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
 ];
 
 const WORK_MODE_OPTIONS = [
@@ -213,32 +216,19 @@ export default function DrivesPage() {
     await fetchDrives();
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
-    return statusOption ? { label: statusOption.label, variant: getStatusVariant(status) } : { label: status, variant: "secondary" as const };
-  };
-
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
-      case "APPLICATIONS_OPEN": return "default";
-      case "ONGOING": return "default";
-      case "COMPLETED": return "secondary";
-      case "CANCELLED": return "destructive";
-      default: return "outline";
-    }
-  };
-
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Not set";
     return new Date(dateString).toLocaleDateString();
   };
 
+  // Phase 19: PUBLISHED -> ONGOING replaces the old two-step
+  // APPLICATIONS_OPEN -> APPLICATIONS_CLOSED -> ONGOING ladder — see
+  // STATUS_MACHINE in drive.service.ts (the real, server-side gate this
+  // mirrors for the UI).
   const getAvailableStatusTransitions = (currentStatus: string) => {
     const transitions: Record<string, string[]> = {
       DRAFT: ["PUBLISHED"],
-      PUBLISHED: ["APPLICATIONS_OPEN"],
-      APPLICATIONS_OPEN: ["APPLICATIONS_CLOSED"],
-      APPLICATIONS_CLOSED: ["ONGOING"],
+      PUBLISHED: ["ONGOING"],
       ONGOING: ["COMPLETED"],
     };
     return transitions[currentStatus] || [];
@@ -292,7 +282,7 @@ export default function DrivesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {drives.filter(d => ["APPLICATIONS_OPEN", "ONGOING"].includes(d.status)).length}
+              {drives.filter(d => isAcceptingApplications(d) || d.status === "ONGOING").length}
             </div>
           </CardContent>
         </Card>
@@ -404,9 +394,7 @@ export default function DrivesPage() {
                         <CardTitle className="text-lg hover:text-primary" onClick={() => handleViewDrive(drive)}>
                           {drive.title}
                         </CardTitle>
-                        <Badge variant={getStatusBadge(drive.status).variant}>
-                          {getStatusBadge(drive.status).label}
-                        </Badge>
+                        <DriveStatusBadge drive={drive} />
                       </div>
                       <CardDescription className="flex items-center gap-4">
                         <span>{drive.company.name}</span>
@@ -437,14 +425,17 @@ export default function DrivesPage() {
                         // Every reason updateDriveStatus() can reject this
                         // specific transition, mirrored here so the admin
                         // sees why up front instead of clicking through to
-                        // an error toast. Keep in sync with the two checks
-                        // in updateDriveStatus (drive.service.ts).
+                        // an error toast. Keep in sync with the checks in
+                        // updateDriveStatus (drive.service.ts).
                         const reasons: string[] = [];
                         if (status === "PUBLISHED" && !drive.company.isActive) {
                           reasons.push("the company is inactive");
                         }
-                        if ((status === "PUBLISHED" || status === "APPLICATIONS_OPEN") && drive._count.jobRoles === 0) {
+                        if (status === "PUBLISHED" && drive._count.jobRoles === 0) {
                           reasons.push("add at least one job role first — an empty drive has nothing for students to apply to");
+                        }
+                        if (status === "ONGOING" && !hasApplicationsClosed(drive)) {
+                          reasons.push("applications are still open — this becomes available once the application window closes");
                         }
                         const blocked = reasons.length > 0;
                         return (

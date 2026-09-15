@@ -11,6 +11,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import { PlacementNotifications } from "@/lib/notifications";
 import { DriveStatus } from "@prisma/client";
 import { writeAuditLog } from "./audit.service";
+import { acceptingApplicationsWhere, hasApplicationsClosed } from "@/lib/drive-status";
 
 export type DriveWithDetails = {
   id: string;
@@ -56,12 +57,20 @@ type DriveStatusTransition = {
   reason?: string;
 };
 
-// Valid status transitions - enforces business rules
+// Valid status transitions - enforces business rules.
+//
+// Phase 19: APPLICATIONS_OPEN/APPLICATIONS_CLOSED are no longer reachable
+// manual transitions — whether a PUBLISHED drive is currently accepting
+// applications is derived from its dates (lib/drive-status.ts), not
+// clicked into. PUBLISHED -> ONGOING now requires that derived "closed"
+// state (see the check in updateDriveStatus below) instead of a separate
+// APPLICATIONS_CLOSED step first. The two enum values remain valid at the
+// database level (existing historical rows, if any survive the Phase 19
+// backfill migration, and Zod's schema validation) but are dead ends here
+// — no `from` state lists either as a `to`.
 const STATUS_MACHINE: Record<string, string[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
-  PUBLISHED: ["APPLICATIONS_OPEN", "CANCELLED"],
-  APPLICATIONS_OPEN: ["APPLICATIONS_CLOSED", "CANCELLED"],
-  APPLICATIONS_CLOSED: ["ONGOING", "CANCELLED"],
+  PUBLISHED: ["ONGOING", "CANCELLED"],
   ONGOING: ["COMPLETED", "CANCELLED"],
   COMPLETED: [], // Final state
   CANCELLED: [], // Final state
@@ -367,15 +376,22 @@ export async function updateDriveStatus(
   }
 
   // Phase 18 P2 — root cause of a real "nothing shows to students" report:
-  // a drive with zero job roles was reaching APPLICATIONS_OPEN with
-  // nothing wrong with it structurally, but nothing for a student to ever
-  // see or apply to either — a dead end that looked like a bug from the
-  // admin side. Blocked at both steps since "published" is loosely used
-  // by admins to mean "not a draft anymore" regardless of which of the
-  // two real statuses that maps to.
-  if ((newStatus === "PUBLISHED" || newStatus === "APPLICATIONS_OPEN") && drive.jobRoles.length === 0) {
+  // a drive with zero job roles was reaching "open" with nothing wrong
+  // with it structurally, but nothing for a student to ever see or apply
+  // to either — a dead end that looked like a bug from the admin side.
+  if (newStatus === "PUBLISHED" && drive.jobRoles.length === 0) {
     throw new ValidationError(
       "Add at least one job role before publishing this drive — an empty drive has nothing for students to apply to."
+    );
+  }
+
+  // Phase 19: PUBLISHED -> ONGOING replaces the old, separately-clicked
+  // APPLICATIONS_CLOSED step — rounds still shouldn't start while the
+  // drive's own dates say applications are still open, but that's now a
+  // date check, not a status an admin has to remember to set first.
+  if (newStatus === "ONGOING" && !hasApplicationsClosed(drive)) {
+    throw new ValidationError(
+      "Applications are still open — rounds can start once the application window closes."
     );
   }
 
@@ -456,34 +472,26 @@ export async function listActiveOpportunities(filters?: {
   }>;
   total: number;
 }> {
+  // Phase 13 — a drive with no close date set (a real, normal case — the
+  // form field is optional) was being excluded entirely by a bare `{gt:
+  // now}` filter, which a null never satisfies; a close date, when set, is
+  // an additional automatic cutoff on top of "published", not a
+  // requirement for visibility.
+  //
+  // Phase 18 P2 — the mirror-image bug on the open side had never been
+  // caught: this query never checked applicationOpenAt at all, so a
+  // drive scheduled to open in the future was visible to students
+  // immediately once published.
+  //
+  // Phase 19 — both of those date checks, plus the "PUBLISHED" status
+  // check, are now acceptingApplicationsWhere() (lib/drive-status.ts):
+  // the single source of truth for "is this drive currently open," reused
+  // by every other query that needs the same answer instead of each
+  // carrying its own (previously drifting — see student/dashboard/page.tsx
+  // before this phase) copy of this logic.
   const where: any = {
-    status: "APPLICATIONS_OPEN",
+    ...acceptingApplicationsWhere(),
     company: { isActive: true },
-    // Phase 13 — a drive with no close date set (a real, normal case — the
-    // form field is optional) was being excluded entirely by a bare `{gt:
-    // now}` filter, which a null never satisfies. APPLICATIONS_OPEN is the
-    // authoritative "is this open" signal; a close date, when set, is an
-    // additional automatic cutoff on top of that, not a requirement for
-    // visibility. Found because this exact path (a drive created through
-    // the real admin form, with the close-date field left blank, expected
-    // to then actually appear to a student) had never been exercised
-    // end-to-end before — every prior test either set a close date or
-    // bypassed this list entirely with a direct Application insert.
-    //
-    // Phase 18 P2 — the mirror-image bug on the open side had never been
-    // caught: this query never checked applicationOpenAt at all, so a
-    // drive scheduled to open in the future (a real, supported case —
-    // admin sets an opening date ahead of time) was visible to students
-    // from the moment its status became APPLICATIONS_OPEN, regardless of
-    // that date. Confirmed with a direct probe against listActiveOpportunities
-    // (drive dates required, real fixtures) before touching this — a
-    // future-dated drive appeared immediately. Same "null means no
-    // constraint, a set date is the constraint" shape as the close-date
-    // fix above.
-    AND: [
-      { OR: [{ applicationOpenAt: null }, { applicationOpenAt: { lte: new Date() } }] },
-      { OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }] },
-    ],
   };
 
   if (filters?.search) {
@@ -576,7 +584,11 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
   const drive = await prisma.placementDrive.findUnique({
     where: { 
       id,
-      status: { in: ["APPLICATIONS_OPEN", "APPLICATIONS_CLOSED", "ONGOING"] },
+      // Phase 19: PUBLISHED now covers what used to be split across
+      // APPLICATIONS_OPEN/APPLICATIONS_CLOSED — the detail page stays
+      // viewable whether or not the drive's date window is currently
+      // "open" (applyForJobRole enforces that separately at apply time).
+      status: { in: ["PUBLISHED", "ONGOING"] },
       company: { isActive: true },
     },
     include: {
@@ -717,9 +729,10 @@ async function handleStatusNotifications(
           drive.company.name,
           drive.title
         );
-        break;
-
-      case "APPLICATIONS_OPEN":
+        // Phase 19: this used to fire on the separate, manually-clicked
+        // APPLICATIONS_OPEN transition. Publishing is now the only step —
+        // the deadline reminder belongs here instead, still gated on
+        // actually having a close date to remind about.
         if (drive.applicationCloseAt) {
           await PlacementNotifications.applicationsClosing(
             drive.id,

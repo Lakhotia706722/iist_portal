@@ -4,7 +4,8 @@
  * Student application lifecycle with:
  * - Eligibility re-check at apply time (gate)
  * - Resume snapshot for version consistency
- * - Auto-close after deadline
+ * - Real-time, date-derived application window (Phase 19 — see
+ *   lib/drive-status.ts; there is no longer a separate "auto-close" step)
  * - Status history tracking
  */
 
@@ -12,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { ApplyInput, ApplicationStatusInput } from "@/lib/validations/placement";
 import { NotFoundError, ValidationError, ForbiddenError } from "@/lib/errors";
 import { evaluateEligibility } from "@/lib/eligibility-engine";
+import { getApplicationWindow, isAcceptingApplications } from "@/lib/drive-status";
 import { writeAuditLog } from "./audit.service";
 import { PlacementNotifications, AdminNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
@@ -163,24 +165,28 @@ export async function applyForJobRole(
 
   if (!jobRole) throw new NotFoundError("Job role not found or inactive");
 
-  if (jobRole.drive.status !== "APPLICATIONS_OPEN") {
+  // Phase 19: "is this drive currently accepting applications" is derived
+  // from PUBLISHED + the date window, not a separately-clicked status —
+  // see lib/drive-status.ts. This replaces three checks that used to live
+  // here (a literal status === "APPLICATIONS_OPEN" comparison, plus two
+  // Phase 18 P2 date checks bolted on beside it): the list query
+  // (listActiveOpportunities) hides a not-yet-open or already-closed
+  // drive, but that's only a visibility filter — a student who already
+  // has the detail page open (or a direct link) could otherwise still
+  // submit outside the real window, so this enforcement gate stays
+  // independent of the list.
+  if (!isAcceptingApplications(jobRole.drive)) {
+    const window = getApplicationWindow(jobRole.drive);
+    if (window === "not_open_yet") {
+      throw new ValidationError("Applications have not opened yet for this role");
+    }
+    if (window === "closed") {
+      throw new ValidationError("Application deadline has passed");
+    }
     throw new ValidationError("Applications are not currently open for this role");
   }
 
   if (!jobRole.drive.company.isActive) throw new ValidationError("Company is inactive");
-
-  // Phase 18 P2: the list query (listActiveOpportunities) now correctly
-  // hides a drive scheduled to open in the future, but that's a
-  // visibility filter, not an enforcement gate — a student who already
-  // has the detail page open (or a direct link) could otherwise still
-  // submit before the scheduled date. Mirrors the close-date check below.
-  if (jobRole.drive.applicationOpenAt && new Date() < jobRole.drive.applicationOpenAt) {
-    throw new ValidationError("Applications have not opened yet for this role");
-  }
-
-  if (jobRole.drive.applicationCloseAt && new Date() > jobRole.drive.applicationCloseAt) {
-    throw new ValidationError("Application deadline has passed");
-  }
 
   const existingApplication = await prisma.application.findFirst({
     where: { studentId, jobRoleId: data.jobRoleId },
@@ -677,32 +683,6 @@ export async function getApplicationStats(driveId?: string): Promise<{
     byAcademicYear: {},
     recentApplications,
   };
-}
-
-// ─── Auto-close applications after deadline ──────────────────────────────────
-
-export async function processApplicationDeadlines(): Promise<void> {
-  const now = new Date();
-
-  const expiredDrives = await prisma.placementDrive.findMany({
-    where: {
-      status: "APPLICATIONS_OPEN",
-      applicationCloseAt: { lt: now },
-    },
-  });
-
-  if (expiredDrives.length === 0) return;
-
-  await prisma.$transaction(async (tx) => {
-    for (const drive of expiredDrives) {
-      await tx.placementDrive.update({
-        where: { id: drive.id },
-        data: { status: "APPLICATIONS_CLOSED" },
-      });
-    }
-  });
-
-  console.log(`Auto-closed applications for ${expiredDrives.length} drives`);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

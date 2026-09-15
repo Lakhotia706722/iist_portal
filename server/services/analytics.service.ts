@@ -101,7 +101,7 @@ export async function getCommandCenterMetrics(): Promise<CommandCenterMetrics> {
     prisma.complianceOverride.count({ where: { status: "RESTRICTED" } }),
     prisma.company.count({ where: { isActive: true } }),
     prisma.company.count({
-      where: { drives: { some: { status: { in: ["PUBLISHED", "APPLICATIONS_OPEN"] } } } },
+      where: { drives: { some: { status: "PUBLISHED" } } },
     }),
     prisma.company.count({
       where: {

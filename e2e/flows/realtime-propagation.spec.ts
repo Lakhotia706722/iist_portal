@@ -91,13 +91,14 @@ test("1 — Admin publishes a drive; Student's already-open Opportunities page s
     const driveRow = admin.page.locator(".cursor-pointer", { hasText: DRIVE_TITLE });
     await driveRow.getByRole("button").last().click();
     await admin.page.getByRole("menuitem", { name: /change to published/i }).click();
-    await expect(admin.page.getByText(/^published$/i).first()).toBeVisible({ timeout: 15_000 });
-    await driveRow.getByRole("button").last().click();
-    await admin.page.getByRole("menuitem", { name: /applications open/i }).click();
+    // Phase 19: "Applications Open" is a derived label (lib/drive-status.ts),
+    // not a second status to click into — this drive's window is already
+    // in range (opens today, closes in 7 days), so it shows immediately.
+    await expect(driveRow.getByText(/^applications open$/i)).toBeVisible({ timeout: 15_000 });
 
     // Student's page was already open and never reloaded — the search
     // filter is still active, so this can only appear via the page's own
-    // refetchInterval poll (15s) picking up the new APPLICATIONS_OPEN drive.
+    // refetchInterval poll (15s) picking up the newly-published drive.
     await expect(student.page.getByText(DRIVE_TITLE)).toBeVisible({ timeout: 25_000 });
   } finally {
     await prisma.placementDrive.deleteMany({ where: { title: DRIVE_TITLE } }).catch(() => {});
@@ -160,7 +161,10 @@ test("3 (fast path) — Admin shortlists an application; Student's already-open 
   await prisma.jobRole.deleteMany({ where: { title: ROLE_TITLE, drive: { title: DRIVE_TITLE } } });
   await prisma.placementDrive.deleteMany({ where: { title: DRIVE_TITLE } });
   const drive = await prisma.placementDrive.create({
-    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin0.id },
+    // Phase 19: "applications closed" is derived from PUBLISHED + a
+    // past applicationCloseAt now, not a literal APPLICATIONS_CLOSED
+    // status — see hasApplicationsClosed() in lib/drive-status.ts.
+    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "PUBLISHED", applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000), createdById: admin0.id },
   });
   const jobRole = await prisma.jobRole.create({ data: { driveId: drive.id, title: ROLE_TITLE, ctcMin: 8, ctcMax: 10 } });
   const resume = await prisma.resume.findFirstOrThrow({ where: { studentId: studentRow.id } });
@@ -219,7 +223,10 @@ test("4a — Admin marks attendance; Student's already-open Journey Tracker upda
   const admin0 = await prisma.user.findUniqueOrThrow({ where: { email: ACCOUNTS.admin.email } });
   await prisma.placementDrive.deleteMany({ where: { title: DRIVE_TITLE } });
   const drive = await prisma.placementDrive.create({
-    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin0.id },
+    // Phase 19: "applications closed" is derived from PUBLISHED + a
+    // past applicationCloseAt now, not a literal APPLICATIONS_CLOSED
+    // status — see hasApplicationsClosed() in lib/drive-status.ts.
+    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "PUBLISHED", applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000), createdById: admin0.id },
   });
   const jobRole = await prisma.jobRole.create({ data: { driveId: drive.id, title: ROLE_TITLE, ctcMin: 8, ctcMax: 10 } });
   const resume = await prisma.resume.findFirstOrThrow({ where: { studentId: studentRow.id } });
@@ -295,7 +302,10 @@ test("4b — Admin records an offer; Student's already-open Placement History sh
     data: { name: COMPANY_NAME, slug: `rt-offer-co-${RUN}`, industry: "TECHNOLOGY", isActive: true },
   });
   const drive = await prisma.placementDrive.create({
-    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "APPLICATIONS_CLOSED", createdById: admin0.id },
+    // Phase 19: "applications closed" is derived from PUBLISHED + a
+    // past applicationCloseAt now, not a literal APPLICATIONS_CLOSED
+    // status — see hasApplicationsClosed() in lib/drive-status.ts.
+    data: { companyId: company.id, title: DRIVE_TITLE, academicYear: "2025-2026", status: "PUBLISHED", applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000), createdById: admin0.id },
   });
   const jobRole = await prisma.jobRole.create({ data: { driveId: drive.id, title: ROLE_TITLE, ctcMin: 8, ctcMax: 10 } });
   const resume = await prisma.resume.findFirst({ where: { studentId: studentRow.id } })

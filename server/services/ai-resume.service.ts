@@ -311,7 +311,7 @@ export async function getJobRecommendations(studentId: string): Promise<JobRecom
   const roles = await prisma.jobRole.findMany({
     where: {
       isActive: true,
-      drive: { status: { in: ["PUBLISHED", "APPLICATIONS_OPEN"] } },
+      drive: { status: "PUBLISHED" },
     },
     select: {
       id: true,

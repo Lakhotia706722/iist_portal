@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
+import { hasApplicationsClosed } from "@/lib/drive-status";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -51,7 +52,12 @@ interface Participant {
   attendance: { status: string } | null;
 }
 
-interface Props { driveId: string; driveStatus: string }
+interface Props {
+  driveId: string;
+  driveStatus: string;
+  applicationOpenAt: string | null;
+  applicationCloseAt: string | null;
+}
 
 // Must match RoundType / ApplicationStatus enums in prisma/schema.prisma —
 // this list previously used invented values ("APTITUDE", "TECHNICAL", "HR",
@@ -360,7 +366,7 @@ function AddParticipantsDialog({
 }
 
 /* ── main component ───────────────────────────────────── */
-export function DriveRounds({ driveId, driveStatus }: Props) {
+export function DriveRounds({ driveId, driveStatus, applicationOpenAt, applicationCloseAt }: Props) {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -372,7 +378,13 @@ export function DriveRounds({ driveId, driveStatus }: Props) {
   const [addParticipantsRoundId, setAddParticipantsRoundId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const canEdit = ["APPLICATIONS_CLOSED", "ONGOING", "SHORTLISTING"].includes(driveStatus);
+  // Phase 19: "applications closed" is derived from PUBLISHED + the date
+  // window, not a literal APPLICATIONS_CLOSED status (which is no longer
+  // reachable — see lib/drive-status.ts). ("SHORTLISTING" isn't a real
+  // DriveStatus value and never matched anything even before this change.)
+  const canEdit =
+    driveStatus === "SHORTLISTING" ||
+    hasApplicationsClosed({ status: driveStatus, applicationOpenAt, applicationCloseAt });
 
   const fetchRounds = useCallback(async () => {
     setLoading(true);

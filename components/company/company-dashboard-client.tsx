@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -16,6 +16,8 @@ interface CompanyDashboard {
     id: string;
     title: string;
     status: string;
+    applicationOpenAt: string | null;
+    applicationCloseAt: string | null;
     academicYear: string;
     applicantCount: number;
     shortlistedCount: number;
@@ -94,7 +96,7 @@ export function CompanyDashboardClient() {
                     <span>{drive.applicantCount} applicants</span>
                     <span>{drive.shortlistedCount} shortlisted</span>
                     <span>{drive.selectedCount} selected</span>
-                    <StatusBadge status={drive.status} />
+                    <DriveStatusBadge drive={drive} />
                   </div>
                 </Link>
               ))}

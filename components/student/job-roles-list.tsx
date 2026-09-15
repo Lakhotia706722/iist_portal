@@ -59,7 +59,7 @@ interface JobRolesListProps {
   jobRoles: JobRole[];
   eligibility: Record<string, EligibilityResult>;
   applicationStatus: Record<string, ApplicationStatus>;
-  timeStatus: "active" | "closing_soon" | "closed";
+  timeStatus: "not_open_yet" | "active" | "closing_soon" | "closed";
   onApplyClick: (jobRoleId: string) => void;
 }
 
@@ -125,6 +125,7 @@ export function JobRolesList({
     return (
       jobRole.isActive &&
       timeStatus !== "closed" &&
+      timeStatus !== "not_open_yet" &&
       !applicationStatus[jobRole.id]?.status &&
       eligibility[jobRole.id]?.eligible
     );
@@ -212,6 +213,7 @@ export function JobRolesList({
                         className={timeStatus === "closing_soon" ? "bg-orange-600 hover:bg-orange-700" : ""}
                       >
                         {timeStatus === "closed" ? "Applications Closed" :
+                         timeStatus === "not_open_yet" ? "Not Open Yet" :
                          !eligibilityResult?.eligible ? "Not Eligible" :
                          timeStatus === "closing_soon" ? "Apply Now!" : "Apply"}
                       </Button>

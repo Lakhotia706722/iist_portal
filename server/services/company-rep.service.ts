@@ -87,6 +87,8 @@ export interface CompanyRepDashboard {
     id: string;
     title: string;
     status: string;
+    applicationOpenAt: Date | null;
+    applicationCloseAt: Date | null;
     academicYear: string;
     applicantCount: number;
     shortlistedCount: number;
@@ -95,7 +97,11 @@ export interface CompanyRepDashboard {
   }>;
 }
 
-const ACTIVE_DRIVE_STATUSES = ["PUBLISHED", "APPLICATIONS_OPEN", "APPLICATIONS_CLOSED", "IN_PROGRESS"];
+// Phase 19: APPLICATIONS_OPEN/APPLICATIONS_CLOSED folded into PUBLISHED —
+// see lib/drive-status.ts. ("IN_PROGRESS" isn't a real DriveStatus value
+// and never matched anything even before this change — left as-is, not
+// this phase's concern.)
+const ACTIVE_DRIVE_STATUSES = ["PUBLISHED", "IN_PROGRESS"];
 
 export async function getCompanyRepDashboard(companyId: string): Promise<CompanyRepDashboard> {
   const company = await prisma.company.findUnique({
@@ -110,6 +116,8 @@ export async function getCompanyRepDashboard(companyId: string): Promise<Company
       id: true,
       title: true,
       status: true,
+      applicationOpenAt: true,
+      applicationCloseAt: true,
       academicYear: true,
       _count: { select: { applications: true } },
       rounds: {
@@ -143,6 +151,8 @@ export async function getCompanyRepDashboard(companyId: string): Promise<Company
         id: d.id,
         title: d.title,
         status: d.status,
+        applicationOpenAt: d.applicationOpenAt,
+        applicationCloseAt: d.applicationCloseAt,
         academicYear: d.academicYear,
         applicantCount: d._count.applications,
         shortlistedCount,

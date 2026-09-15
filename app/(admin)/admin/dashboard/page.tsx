@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
+import { acceptingApplicationsWhere } from "@/lib/drive-status";
 import { GraduationCap, Building2, Briefcase, Users } from "lucide-react";
 import Link from "next/link";
 
@@ -24,17 +25,20 @@ export default async function AdminDashboard() {
     prisma.student.count(),
     prisma.department.count(),
     prisma.user.count(),
-    prisma.placementDrive.count({ where: { status: "APPLICATIONS_OPEN" } }),
+    // Phase 19: "currently accepting applications" is derived from
+    // PUBLISHED + the date window, not a separate APPLICATIONS_OPEN
+    // status — see lib/drive-status.ts.
+    prisma.placementDrive.count({ where: acceptingApplicationsWhere() }),
     prisma.auditLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 5,
       select: { id: true, action: true, entity: true, createdAt: true, user: { select: { name: true } } },
     }),
     prisma.placementDrive.findMany({
-      where: { status: { in: ["PUBLISHED", "APPLICATIONS_OPEN"] } },
+      where: { status: "PUBLISHED" },
       orderBy: { applicationCloseAt: "asc" },
       take: 5,
-      select: { id: true, title: true, status: true, company: { select: { name: true } }, applicationCloseAt: true },
+      select: { id: true, title: true, status: true, company: { select: { name: true } }, applicationOpenAt: true, applicationCloseAt: true },
     }),
   ]);
 
@@ -107,7 +111,7 @@ export default async function AdminDashboard() {
                       <p className="font-medium truncate">{d.title}</p>
                       <p className="text-xs text-muted-foreground truncate">{d.company.name}</p>
                     </div>
-                    <StatusBadge status={d.status} className="shrink-0 text-xs" />
+                    <DriveStatusBadge drive={d} className="shrink-0 text-xs" />
                   </Link>
                 ))}
               </div>

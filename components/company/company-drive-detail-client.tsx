@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -15,6 +16,8 @@ interface DriveDetail {
   id: string;
   title: string;
   status: string;
+  applicationOpenAt: string | null;
+  applicationCloseAt: string | null;
   academicYear: string;
   description: string | null;
   workMode: string;
@@ -64,7 +67,7 @@ export function CompanyDriveDetailClient({ driveId }: { driveId: string }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">{drive.title}</CardTitle>
-          <StatusBadge status={drive.status} />
+          <DriveStatusBadge drive={drive} />
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3 text-sm">
           <div>

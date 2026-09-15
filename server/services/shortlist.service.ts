@@ -10,6 +10,7 @@ import { BulkShortlistInput, CsvShortlistInput } from "@/lib/validations/placeme
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { PlacementNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
+import { hasApplicationsClosed } from "@/lib/drive-status";
 import { writeAuditLog } from "./audit.service";
 import { getStorageAdapter } from "@/lib/storage";
 
@@ -629,7 +630,7 @@ export async function validateShortlistEligibility(
       status: true,
       jobRole: {
         select: {
-          drive: { select: { status: true } },
+          drive: { select: { status: true, applicationOpenAt: true, applicationCloseAt: true } },
         },
       },
     },
@@ -654,7 +655,9 @@ export async function validateShortlistEligibility(
       return;
     }
 
-    if (!["APPLICATIONS_CLOSED", "ONGOING"].includes(app.jobRole.drive.status)) {
+    // Phase 19: "applications closed" is derived from the date window
+    // once PUBLISHED, not a literal APPLICATIONS_CLOSED status.
+    if (!hasApplicationsClosed(app.jobRole.drive)) {
       ineligible.push({
         applicationId: id,
         reason: `Drive status is ${app.jobRole.drive.status}, shortlisting not allowed`

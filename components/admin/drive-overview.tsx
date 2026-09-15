@@ -6,9 +6,10 @@
 
 "use client";
 
-import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award, AlertTriangle, Check, X } from "lucide-react";
+import { Calendar, Clock, MapPin, Phone, Mail, User, FileText, Award, AlertTriangle, Check, X, Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getApplicationWindowMessage } from "@/lib/drive-status";
 
 interface DriveOverviewProps {
   drive: {
@@ -42,12 +43,11 @@ interface DriveOverviewProps {
 }
 
 /**
- * Everything updateDriveStatus() (drive.service.ts) actually checks before
- * allowing PUBLISHED or APPLICATIONS_OPEN — kept in sync with that
- * function and with the same two checks mirrored in the drives list
- * page's disabled-menu-item tooltip, so there's exactly one place per
- * layer that has to agree with the real gate, not three copies drifting
- * apart.
+ * Everything that gates DRAFT -> PUBLISHED in updateDriveStatus()
+ * (drive.service.ts) — kept in sync with that function and with the same
+ * checks mirrored in the drives list page's disabled-menu-item tooltip,
+ * so there's exactly one place per layer that has to agree with the real
+ * gate, not three copies drifting apart.
  */
 function publishConditions(drive: DriveOverviewProps["drive"]): { label: string; met: boolean }[] {
   return [
@@ -57,28 +57,24 @@ function publishConditions(drive: DriveOverviewProps["drive"]): { label: string;
 }
 
 /**
- * Phase 18 P2 — root cause of a real "published drive, nothing shows to
- * students" report: reaching APPLICATIONS_OPEN with zero job roles, or
- * with an applicationOpenAt still in the future, is correct, intentional
- * behavior (a scheduled drive, or one an admin hasn't finished setting
- * up) — but until now there was no way for an admin looking at this page
- * to know *why* students see nothing. Below "Applications Open": a
- * checklist of what's actually blocking Publish (each condition mirrors
- * publishConditions() above, live — no refresh needed once satisfied, the
- * same props update that flips _count.jobRoles re-renders this). At or
- * past "Applications Open": a single most-relevant sentence, since the
- * checklist no longer applies.
+ * Phase 19 — once a drive is PUBLISHED, whether it's currently accepting
+ * applications is derived from its dates (lib/drive-status.ts), never a
+ * separate status an admin clicks into. So there's nothing left to
+ * "unblock" here the way the pre-publish checklist above does — just an
+ * accurate, purely informational read of where the drive actually is
+ * right now. The one real remaining problem (Phase 18 P2's original
+ * report): a published drive can still end up with zero active roles if
+ * they're later deactivated, which stays a distinct warning rather than
+ * folding into the informational message.
  */
-function visibilityBanner(drive: DriveOverviewProps["drive"]): string | null {
-  if (drive.status !== "APPLICATIONS_OPEN") return null;
+function publishedStatusMessage(drive: DriveOverviewProps["drive"]): { text: string; isProblem: boolean } {
   if (drive._count.jobRoles === 0) {
-    return "This drive has no job roles yet — even though applications are open, there's nothing for a student to see or apply to. Add a job role.";
+    return {
+      text: "This drive has no active job roles — even though it's published, there's nothing for a student to see or apply to. Add a job role.",
+      isProblem: true,
+    };
   }
-  if (drive.applicationOpenAt && new Date(drive.applicationOpenAt) > new Date()) {
-    const opens = new Date(drive.applicationOpenAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-    return `This drive becomes visible to students on ${opens}.`;
-  }
-  return null;
+  return { text: getApplicationWindowMessage(drive), isProblem: false };
 }
 
 const WORK_MODE_LABELS = {
@@ -98,22 +94,20 @@ export function DriveOverview({ drive, onUpdate }: DriveOverviewProps) {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const banner = visibilityBanner(drive);
-  const isPrePublish = drive.status === "DRAFT" || drive.status === "PUBLISHED";
-  const conditions = isPrePublish ? publishConditions(drive) : [];
+  const isDraft = drive.status === "DRAFT";
+  const conditions = isDraft ? publishConditions(drive) : [];
   const unmetCount = conditions.filter((c) => !c.met).length;
+  const publishedStatus = drive.status === "PUBLISHED" ? publishedStatusMessage(drive) : null;
 
   return (
     <div className="space-y-6">
-      {isPrePublish && (
+      {isDraft && (
         <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="font-medium">
-              {drive.status === "DRAFT"
-                ? "This drive is still a draft — students can't see it."
-                : "This drive is published but not yet open for applications — students won't see it yet."}
-              {unmetCount > 0 ? " Before publishing:" : " Ready to move to Applications Open."}
+              This drive is still a draft — students can&apos;t see it.
+              {unmetCount > 0 ? " Before publishing:" : " Ready to publish."}
             </span>
           </div>
           {unmetCount > 0 && (
@@ -132,10 +126,16 @@ export function DriveOverview({ drive, onUpdate }: DriveOverviewProps) {
           )}
         </div>
       )}
-      {banner && (
+      {publishedStatus && publishedStatus.isProblem && (
         <div role="status" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{banner}</span>
+          <span>{publishedStatus.text}</span>
+        </div>
+      )}
+      {publishedStatus && !publishedStatus.isProblem && (
+        <div role="status" className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{publishedStatus.text}</span>
         </div>
       )}
 

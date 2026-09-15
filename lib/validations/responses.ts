@@ -197,6 +197,12 @@ export const drivesListResponseSchema = z.object({
       title: z.string(),
       academicYear: z.string(),
       status: z.string(),
+      // Phase 19: needed to derive the real "open/closed" state — see
+      // lib/drive-status.ts and DriveStatusBadge. Zod strips undeclared
+      // keys by default, so without these the underlying API response
+      // (which already includes them) would silently lose them here.
+      applicationOpenAt: z.string().nullable(),
+      applicationCloseAt: z.string().nullable(),
       company: z.object({ name: z.string() }),
       _count: z.object({ jobRoles: z.number(), applications: z.number() }),
     })

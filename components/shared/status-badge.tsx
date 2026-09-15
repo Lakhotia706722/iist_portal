@@ -38,11 +38,13 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   DECLINED: "destructive",
   JOINED: "success",
 
-  // Drive
+  // Drive — DriveStatusBadge (components/shared/drive-status-badge.tsx)
+  // handles PUBLISHED specially (deriving open/not-open-yet/closed from
+  // its dates — see lib/drive-status.ts), so raw drive statuses no longer
+  // render through this generic component. Kept here only for whatever
+  // other status types might coincidentally share these names.
   DRAFT: "secondary",
   PUBLISHED: "info",
-  APPLICATIONS_OPEN: "success",
-  APPLICATIONS_CLOSED: "warning",
   ONGOING: "info",
   COMPLETED: "success",
   CANCELLED: "destructive",
@@ -74,8 +76,6 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
 /** Statuses whose default Title Case rendering isn't what we want. */
 const STATUS_LABELS: Record<string, string> = {
   RE_UPLOAD_REQUESTED: "Re-upload",
-  APPLICATIONS_OPEN: "Applications Open",
-  APPLICATIONS_CLOSED: "Applications Closed",
   PENDING_VERIFICATION: "Pending Verification",
   NOT_UPLOADED: "Not Uploaded",
   ON_HOLD: "On Hold",

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { acceptingApplicationsWhere } from "@/lib/drive-status";
 import { Briefcase, ClipboardList, Award, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,17 +24,19 @@ export default async function StudentDashboard() {
   /**
    * Phase 13 — every stat and "recent" section on this page used to be a
    * hardcoded "—" and a literal "Available from Phase 2 onwards." string,
-   * regardless of how much real data existed. Same where-clause
-   * listActiveOpportunities() (drive.service.ts) uses for "currently open,
-   * not yet closed" so this number matches what the Opportunities page
-   * itself would show.
+   * regardless of how much real data existed.
+   *
+   * Phase 19 — this where-clause was a hand-copied, independently-drifted
+   * duplicate of listActiveOpportunities()'s (drive.service.ts): it never
+   * checked applicationOpenAt at all, so a not-yet-open drive would have
+   * counted as "active" here (Phase 18 P2 fixed this exact gap in the real
+   * Opportunities page, but never made it back to this copy). Now shares
+   * the one real implementation via acceptingApplicationsWhere()
+   * (lib/drive-status.ts) instead of maintaining a second copy.
    */
   const activeOpportunitiesWhere = {
-    status: "APPLICATIONS_OPEN" as const,
+    ...acceptingApplicationsWhere(),
     company: { isActive: true },
-    // A drive with no close date set is still open — see the matching
-    // comment in listActiveOpportunities() (drive.service.ts).
-    OR: [{ applicationCloseAt: null }, { applicationCloseAt: { gt: new Date() } }],
   };
 
   const [activeOpportunitiesCount, applicationCount, offerCount, recentOpportunities, recentApplications] = student

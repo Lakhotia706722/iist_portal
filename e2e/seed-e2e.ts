@@ -250,13 +250,19 @@ async function main() {
   // listActiveOpportunities() requires applicationCloseAt in the future —
   // a null value never satisfies its `gt: new Date()` filter, so a drive
   // with no close date simply never appears as a browsable opportunity.
+  // Phase 19: "accepting applications" is derived from PUBLISHED + the
+  // date window now, not a separate APPLICATIONS_OPEN status — see
+  // lib/drive-status.ts. applicationOpenAt is left null (real admin
+  // creation requires it — Phase 17 P3 — but a null value here means
+  // "always open," which is exactly right for a fixture with no
+  // meaningful open-date scenario of its own to test).
   const futureCloseDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   const drive = await prisma.placementDrive.upsert({
     where: { id: "e2e-drive-1" },
-    update: { status: "APPLICATIONS_OPEN", applicationCloseAt: futureCloseDate },
+    update: { status: "PUBLISHED", applicationCloseAt: futureCloseDate },
     create: {
       id: "e2e-drive-1", companyId: companyA.id, title: "E2E Test Drive",
-      academicYear: "2025-2026", status: "APPLICATIONS_OPEN", createdById: adminUser.id,
+      academicYear: "2025-2026", status: "PUBLISHED", createdById: adminUser.id,
       applicationCloseAt: futureCloseDate,
     },
   });
@@ -285,7 +291,7 @@ async function main() {
     update: {},
     create: {
       id: "e2e-drive-shortlisted", companyId: companyB.id, title: "E2E Shortlisted Drive",
-      academicYear: "2025-2026", status: "APPLICATIONS_OPEN", createdById: adminUser.id,
+      academicYear: "2025-2026", status: "PUBLISHED", createdById: adminUser.id,
     },
   });
   const jobRoleShortlisted = await prisma.jobRole.upsert({

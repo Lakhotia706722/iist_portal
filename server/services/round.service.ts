@@ -10,6 +10,7 @@ import { RoundInput, ParticipantResultInput } from "@/lib/validations/placement"
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { PlacementNotifications } from "@/lib/notifications";
 import { ApplicationStatus } from "@prisma/client";
+import { hasApplicationsClosed } from "@/lib/drive-status";
 import { writeAuditLog } from "./audit.service";
 
 export type RoundWithDetails = {
@@ -162,14 +163,16 @@ export async function createRound(
   // Validate drive exists and is in appropriate status
   const drive = await prisma.placementDrive.findUnique({
     where: { id: driveId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, applicationOpenAt: true, applicationCloseAt: true },
   });
 
   if (!drive) {
     throw new NotFoundError("Placement drive not found");
   }
 
-  if (!["APPLICATIONS_CLOSED", "ONGOING"].includes(drive.status)) {
+  // Phase 19: "applications closed" is now derived from the date window
+  // once PUBLISHED, not a literal APPLICATIONS_CLOSED status.
+  if (!hasApplicationsClosed(drive)) {
     throw new ValidationError("Cannot create rounds for drive in current status");
   }
 

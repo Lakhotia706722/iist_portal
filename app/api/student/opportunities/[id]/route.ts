@@ -9,6 +9,7 @@ import { auth } from "@/lib/auth/auth";
 import { getStudentIdFromUserId } from "@/lib/auth/student-session";
 import { getOpportunityDetail } from "@/server/services/drive.service";
 import { evaluateEligibility } from "@/lib/eligibility-engine";
+import { getApplicationWindow } from "@/lib/drive-status";
 import { handleApiError } from "@/lib/api-utils";
 
 interface RouteParams {
@@ -37,11 +38,23 @@ export async function GET(
     // Get opportunity details
     const opportunity = await getOpportunityDetail(params.id);
 
-    // Calculate time status
-    let timeStatus = "active";
+    // Calculate time status. Phase 19: this used to only ever check
+    // applicationCloseAt — a drive scheduled to open in the future was
+    // never reachable through the list (listActiveOpportunities hides it),
+    // but getOpportunityDetail's own status filter doesn't care about
+    // dates, so a direct/bookmarked link could still land here and get
+    // "active" by default, implying Apply would work when the server
+    // would actually reject it (applyForJobRole enforces the real date
+    // gate independently either way, but the UI shouldn't lie about it).
+    let timeStatus: "not_open_yet" | "active" | "closing_soon" | "closed" = "active";
     let timeRemaining = null;
 
-    if (opportunity.applicationCloseAt) {
+    const window = getApplicationWindow(opportunity);
+    if (window === "not_open_yet") {
+      timeStatus = "not_open_yet";
+      const opensAt = new Date(opportunity.applicationOpenAt!);
+      timeRemaining = Math.ceil((opensAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+    } else if (opportunity.applicationCloseAt) {
       const now = new Date();
       const closeTime = new Date(opportunity.applicationCloseAt);
       const timeDiff = closeTime.getTime() - now.getTime();

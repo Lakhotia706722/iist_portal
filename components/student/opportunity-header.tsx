@@ -37,7 +37,7 @@ interface OpportunityHeaderProps {
     applicationCloseAt: string | null;
     driveStartDate: string | null;
     driveEndDate: string | null;
-    timeStatus: "active" | "closing_soon" | "closed";
+    timeStatus: "not_open_yet" | "active" | "closing_soon" | "closed";
     timeRemaining: number | null;
   };
 }
@@ -56,6 +56,13 @@ export function OpportunityHeader({ opportunity }: OpportunityHeaderProps) {
 
   const getStatusBadge = () => {
     switch (opportunity.timeStatus) {
+      case "not_open_yet":
+        return (
+          <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200">
+            <Clock className="h-3 w-3 mr-1" />
+            Not Open Yet
+          </Badge>
+        );
       case "closed":
         return (
           <Badge variant="secondary" className="bg-red-50 text-red-700 border-red-200">
@@ -82,13 +89,17 @@ export function OpportunityHeader({ opportunity }: OpportunityHeaderProps) {
 
   const getCountdownText = () => {
     if (opportunity.timeStatus === "closed") return null;
-    
+
     if (!opportunity.timeRemaining) return null;
-    
+
+    if (opportunity.timeStatus === "not_open_yet") {
+      return `Opens in ${opportunity.timeRemaining} day${opportunity.timeRemaining === 1 ? "" : "s"}`;
+    }
+
     if (opportunity.timeStatus === "closing_soon") {
       return `${opportunity.timeRemaining}h left`;
     }
-    
+
     return `${opportunity.timeRemaining} days left`;
   };
 

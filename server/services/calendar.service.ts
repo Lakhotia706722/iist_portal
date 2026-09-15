@@ -166,7 +166,7 @@ export async function getStudentCalendar(
         drive: {
           OR: [
             { applications: { some: { studentId } } },
-            { status: { in: ["PUBLISHED", "APPLICATIONS_OPEN"] } },
+            { status: "PUBLISHED" },
           ],
         },
       },

@@ -79,16 +79,17 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   const driveRow = page.locator(".cursor-pointer", { hasText: DRIVE_TITLE });
   await driveRow.getByRole("button").last().click();
   await page.getByRole("menuitem", { name: /change to published/i }).click();
-  await expect(page.getByText(/^published$/i).first()).toBeVisible({ timeout: 15_000 });
+  // Phase 19: "Applications Open" is a derived label, not a second status
+  // to click into — fillRequiredDriveDates() above already put this
+  // drive's window in range (opens today), so it shows immediately.
+  await expect(driveRow.getByText(/^applications open$/i)).toBeVisible({ timeout: 15_000 });
 
-  // The full DRAFT -> PUBLISHED -> APPLICATIONS_OPEN -> APPLICATIONS_CLOSED
-  // status ladder is a real, one-transition-at-a-time UI flow (each status
-  // change is its own explicit admin action) — "publish it" above already
-  // exercises that mechanism once. Rounds specifically require
-  // APPLICATIONS_CLOSED ("Rounds can be added once applications close"),
-  // so advance the remaining two steps directly rather than re-testing the
-  // same publish UI action twice more.
-  await prisma.placementDrive.update({ where: { id: driveId }, data: { status: "APPLICATIONS_CLOSED" } });
+  // Rounds require applications to have actually closed (Phase 19:
+  // hasApplicationsClosed() in lib/drive-status.ts — derived from the
+  // date window now, not a separate APPLICATIONS_CLOSED status this test
+  // used to set directly). Backdate the close date directly rather than
+  // waiting for real time to pass or re-testing the publish UI action.
+  await prisma.placementDrive.update({ where: { id: driveId }, data: { applicationCloseAt: new Date(Date.now() - 60 * 60 * 1000) } });
 
   // 5 — Student A applies (direct insert — the Apply-flow UI itself is
   // already fully covered by apply-flow.spec.ts; this test's focus is the

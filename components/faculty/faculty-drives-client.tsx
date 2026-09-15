@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -55,7 +55,7 @@ export function FacultyDrivesClient() {
               <p className="font-medium">{d.title}</p>
               <p className="text-sm text-muted-foreground">{d.company.name} · {d.academicYear}</p>
               <div className="mt-3 flex items-center justify-between">
-                <StatusBadge status={d.status} className="text-xs" />
+                <DriveStatusBadge drive={d} className="text-xs" />
                 <span className="text-xs text-muted-foreground">{d._count.applications} applicant(s) · {d._count.jobRoles} role(s)</span>
               </div>
             </Card>

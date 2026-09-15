@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -36,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { ErrorState } from "@/components/shared/error-state";
+import { DriveStatusBadge } from "@/components/shared/drive-status-badge";
 import { DriveForm } from "@/components/admin/drive-form";
 import { DriveOverview } from "@/components/admin/drive-overview";
 import { DriveJobRoles } from "@/components/admin/drive-job-roles";
@@ -83,16 +83,6 @@ interface DriveDetail {
     rounds: number;
   };
 }
-
-const STATUS_OPTIONS = [
-  { value: "DRAFT", label: "Draft", color: "gray" },
-  { value: "PUBLISHED", label: "Published", color: "blue" },
-  { value: "APPLICATIONS_OPEN", label: "Applications Open", color: "green" },
-  { value: "APPLICATIONS_CLOSED", label: "Applications Closed", color: "yellow" },
-  { value: "ONGOING", label: "Ongoing", color: "orange" },
-  { value: "COMPLETED", label: "Completed", color: "purple" },
-  { value: "CANCELLED", label: "Cancelled", color: "red" },
-];
 
 interface DriveDetailPageProps {
   params: { id: string };
@@ -155,21 +145,6 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
   const handleDriveUpdate = async () => {
     setShowEditDialog(false);
     await fetchDriveDetail();
-  };
-
-  const getStatusBadge = (status: string) => {
-    const statusOption = STATUS_OPTIONS.find(opt => opt.value === status);
-    return statusOption ? { label: statusOption.label, variant: getStatusVariant(status) } : { label: status, variant: "secondary" as const };
-  };
-
-  const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
-    switch (status) {
-      case "APPLICATIONS_OPEN": return "default";
-      case "ONGOING": return "default";
-      case "COMPLETED": return "secondary";
-      case "CANCELLED": return "destructive";
-      default: return "outline";
-    }
   };
 
   const formatDate = (dateString: string | null) => {
@@ -242,9 +217,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
                   <CardTitle className="text-2xl">{drive.title}</CardTitle>
-                  <Badge variant={getStatusBadge(drive.status).variant}>
-                    {getStatusBadge(drive.status).label}
-                  </Badge>
+                  <DriveStatusBadge drive={drive} />
                 </div>
                 
                 <CardDescription className="flex items-center gap-4 text-base">
@@ -353,7 +326,12 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
           </TabsContent>
 
           <TabsContent value="rounds">
-            <DriveRounds driveId={drive.id} driveStatus={drive.status} />
+            <DriveRounds
+              driveId={drive.id}
+              driveStatus={drive.status}
+              applicationOpenAt={drive.applicationOpenAt}
+              applicationCloseAt={drive.applicationCloseAt}
+            />
           </TabsContent>
 
           <TabsContent value="shortlisting">
