@@ -86,7 +86,6 @@ export async function listShortlistableApplications(
 }> {
   const where: any = {
     jobRole: { driveId },
-    status: { in: ["APPLIED", "UNDER_REVIEW"] }, // Only shortlistable statuses
   };
 
   // Apply filters
@@ -94,8 +93,22 @@ export async function listShortlistableApplications(
     where.jobRoleId = filters.jobRoleId;
   }
 
-  if (filters.status) {
+  // Application.status is the single source of truth for this tab — it
+  // must show the same record the Applications tab shows, not a
+  // separately-tracked shortlist state. With no status filter, show every
+  // application still relevant to the shortlisting decision (pending
+  // review, already shortlisted, or rejected) so a SHORTLISTED application
+  // never disappears from here just because it's no longer APPLIED/
+  // UNDER_REVIEW. Later-stage statuses (WRITTEN_TEST onward) belong to the
+  // Rounds tab instead. "PENDING" is the UI's grouping label for "not yet
+  // decided" — not a literal ApplicationStatus enum value — so it expands
+  // to the two real statuses it represents.
+  if (filters.status === "PENDING") {
+    where.status = { in: ["APPLIED", "UNDER_REVIEW"] };
+  } else if (filters.status) {
     where.status = filters.status;
+  } else {
+    where.status = { in: ["APPLIED", "UNDER_REVIEW", "SHORTLISTED", "REJECTED"] };
   }
 
   if (filters.search) {
