@@ -249,13 +249,22 @@ export function DriveDashboard({ driveId }: Props) {
             <CardDescription>Daily submission counts</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-end gap-1 h-28 overflow-x-auto pb-1">
+            <div className="flex h-28 items-stretch gap-1 overflow-x-auto pb-1">
               {applicationTimeline.map(t => {
                 const pct = Math.round((t.count / maxTimeline) * 100);
                 return (
-                  <div key={t.date} className="flex flex-col items-center gap-1 flex-1 min-w-[28px]">
+                  <div key={t.date} className="flex h-full flex-1 min-w-[28px] flex-col items-center gap-1">
                     <span className="text-xs text-muted-foreground tabular-nums">{t.count}</span>
-                    <div className="w-full rounded-t bg-primary/80 transition-all" style={{ height: `${Math.max(pct, 2)}%` }} />
+                    {/* This wrapper is what gives the bar's height:%  a real
+                        pixel height to resolve against — the column itself
+                        was sized by its own content (label + bar + date),
+                        so a percentage height on the bar directly inside it
+                        had nothing definite to measure against and
+                        silently collapsed to 0, rendering no bar at all
+                        regardless of the count. */}
+                    <div className="flex w-full flex-1 items-end">
+                      <div className="w-full rounded-t bg-primary/80 transition-all" style={{ height: `${Math.max(pct, 2)}%` }} />
+                    </div>
                     <span className="text-[10px] text-muted-foreground -rotate-45 origin-top-left whitespace-nowrap mt-1">
                       {new Date(t.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                     </span>
