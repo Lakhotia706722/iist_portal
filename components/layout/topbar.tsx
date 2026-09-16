@@ -7,6 +7,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { NotificationBell } from "./notification-bell";
 import { GlobalSearch } from "./global-search";
+import { IISTLogo } from "@/components/shared/iist-logo";
 
 interface TopbarProps {
   userName: string;
@@ -36,6 +37,13 @@ export function Topbar({ userName, userRole, userEmail, onMenuClick }: TopbarPro
       >
         <Menu className="h-5 w-5" />
       </button>
+
+      {/* Brand mark — visible in the always-on mobile header strip; desktop
+          already carries the logo in the persistent sidebar. */}
+      <div className="flex shrink-0 items-center gap-2 md:hidden">
+        <IISTLogo size={28} />
+        <span className="text-sm font-bold leading-none">IIST</span>
+      </div>
 
       {/* Global search — staff roles only; hidden on the narrowest screens
           where there's no room for it alongside the hamburger, bell and

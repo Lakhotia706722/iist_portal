@@ -2,9 +2,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { GraduationCap, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { IISTLogo } from "@/components/shared/iist-logo";
 
 export interface NavItem {
   label: string;
@@ -120,9 +121,7 @@ function Logo({ collapsed }: { collapsed: boolean }) {
       href="/dashboard"
       className={cn("flex items-center gap-2.5 overflow-hidden", collapsed && "justify-center")}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-        <GraduationCap className="h-5 w-5 text-white" />
-      </div>
+      <IISTLogo size={32} className="rounded-full bg-white p-0.5" />
       {!collapsed && (
         <div className="leading-tight overflow-hidden">
           <p className="text-sm font-bold text-sidebar-foreground truncate">IIST</p>

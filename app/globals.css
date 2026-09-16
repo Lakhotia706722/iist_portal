@@ -4,31 +4,40 @@
 
 @layer base {
   :root {
+    /* IIST institutional palette — derived from the official logo: a deep
+       rose/crimson (the lotus emblem) as the primary brand color, and a
+       warm gold (the logo's circular field) as a secondary accent. Neutral
+       surfaces (background/card/border/muted) are warmed very slightly to
+       sit comfortably alongside those hues instead of clashing with the
+       old cool blue-gray. Semantic colors (success/warning/destructive/
+       info) are defined separately in each component's own variants, not
+       here, and are intentionally left untouched — they mean something
+       specific and aren't part of the brand identity. */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 340 15% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 340 15% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 340 15% 12%;
+    --primary: 340 72% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 43 92% 56%;
+    --secondary-foreground: 26 45% 15%;
+    --muted: 355 20% 96%;
+    --muted-foreground: 340 8% 42%;
+    --accent: 43 92% 94%;
+    --accent-foreground: 26 45% 15%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --border: 355 15% 88%;
+    --input: 355 15% 88%;
+    --ring: 340 72% 42%;
     --radius: 0.5rem;
-    --sidebar: 222 47% 11%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-border: 215 28% 17%;
-    --sidebar-accent: 215 28% 17%;
-    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar: 340 32% 10%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-border: 340 22% 18%;
+    --sidebar-accent: 340 28% 20%;
+    --sidebar-accent-foreground: 0 0% 100%;
   }
 }
 

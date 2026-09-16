@@ -82,7 +82,7 @@ export function PasswordResetEmail({
             {footerNote}
           </Text>
           <Text style={{ color: "#94a3b8", fontSize: "12px", marginTop: "32px" }}>
-            IIST Placement Cell · Thiruvananthapuram, Kerala, India
+            IIST Placement Cell · Indore, Madhya Pradesh, India
           </Text>
         </Container>
       </Body>

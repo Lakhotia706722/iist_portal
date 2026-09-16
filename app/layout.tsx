@@ -8,11 +8,11 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: {
-    default: "IIST Placement Portal",
+    default: "IIST Career & Placement Portal",
     template: "%s | IIST Placement Portal",
   },
   description:
-    "Indian Institute of Space Science and Technology — Career Development & Placement Management Portal",
+    "Indore Institute of Science and Technology — Career Development & Placement Management Portal",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

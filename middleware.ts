@@ -116,5 +116,13 @@ export const config = {
   // Phase 6: the auth pages are now included (not excluded) so they get a
   // CSP nonce too — the function above skips their auth/role checks itself.
   // api/auth stays excluded (NextAuth's own routes; no HTML to protect).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth).*)"],
+  //
+  // `.*\..*` excludes any request whose path has a file extension — i.e.
+  // every static asset under public/ (logos, icons, manifest, etc.),
+  // present or future. Without it, an unauthenticated request for one of
+  // these (the browser fetching a favicon or a login-page logo before any
+  // session exists, for instance) got the same redirect-to-/login
+  // treatment as a real page, so the "image" it received back was an HTML
+  // redirect — not a missing-file bug, a middleware-scope bug.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\..*).*)"],
 };

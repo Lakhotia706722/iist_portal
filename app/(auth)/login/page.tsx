@@ -1,5 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
-import { GraduationCap } from "lucide-react";
+import { IISTLogo } from "@/components/shared/iist-logo";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +11,7 @@ export default function LoginPage() {
       {/* Left brand panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-sidebar p-12">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-            <GraduationCap className="h-6 w-6 text-white" />
-          </div>
+          <IISTLogo size={48} className="rounded-full bg-white p-0.5" />
           <div>
             <p className="text-lg font-bold text-white leading-none">IIST</p>
             <p className="text-xs text-white/60">Placement Portal</p>
@@ -26,12 +24,12 @@ export default function LoginPage() {
               opportunity, tracked in one place.&rdquo;
             </p>
             <footer className="text-sm text-white/60">
-              Training &amp; Placement Cell, IIST Thiruvananthapuram
+              Training &amp; Placement Cell, IIST Indore
             </footer>
           </blockquote>
         </div>
         <p className="text-xs text-white/40">
-          Indian Institute of Space Science and Technology
+          Indore Institute of Science and Technology
         </p>
       </div>
 
@@ -40,9 +38,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm space-y-8">
           {/* Mobile logo */}
           <div className="flex items-center gap-3 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-5 w-5 text-white" />
-            </div>
+            <IISTLogo size={40} />
             <div>
               <p className="font-bold leading-none">IIST Placement Portal</p>
               <p className="text-xs text-muted-foreground">Training &amp; Placement Cell</p>
