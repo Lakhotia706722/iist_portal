@@ -277,7 +277,15 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
       {/* Tabbed Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        {/* Was "grid grid-cols-7" for 8 tabs — a stale mismatch (probably
+            predating the "Dashboard" tab) that forced 7 equal-width
+            columns regardless of viewport, so on a narrow screen each
+            ~50px column overflowed its own boundary into the next one,
+            rendering as run-together text. The shared TabsList already
+            handles this responsively (natural-width triggers that scroll
+            horizontally instead of being squeezed), so no per-page
+            override is needed at all. */}
+        <TabsList className="w-full">
           <TabsTrigger value="overview" className="gap-1">
             <FileText className="h-4 w-4" />
             Overview
