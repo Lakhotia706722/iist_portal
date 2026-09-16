@@ -75,13 +75,13 @@ export function VideoProfileClient() {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-50">
                 <Video className="h-6 w-6 text-violet-600" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">Video Introduction</p>
                   <Badge variant={cfg.variant} className="gap-1">
                     <StatusIcon className="h-3 w-3" />{cfg.label}
@@ -98,7 +98,7 @@ export function VideoProfileClient() {
                 )}
               </div>
             </div>
-            <Button size="sm" onClick={() => { form.reset(); setVideoFile(null); setFormOpen(true); }}>
+            <Button size="sm" className="shrink-0" onClick={() => { form.reset(); setVideoFile(null); setFormOpen(true); }}>
               <Upload className="h-4 w-4" />
               {status === "NOT_UPLOADED" ? "Upload Video" : "Update Video"}
             </Button>

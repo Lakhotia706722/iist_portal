@@ -131,12 +131,12 @@ export function OpportunityHeader({ opportunity }: OpportunityHeaderProps) {
 
             {/* Main Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-4 mb-2">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 mb-1">
+              <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
+                <div className="min-w-0">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-1 break-words">
                     {opportunity.title}
                   </h1>
-                  <div className="flex items-center gap-3 text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
                     <span className="text-lg font-semibold text-gray-700">
                       {opportunity.company.name}
                     </span>
@@ -145,9 +145,9 @@ export function OpportunityHeader({ opportunity }: OpportunityHeaderProps) {
                     </Badge>
                   </div>
                 </div>
-                
+
                 {/* Status Badge */}
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {getStatusBadge()}
                   {getCountdownText() && (
                     <span className="text-sm font-medium text-muted-foreground">

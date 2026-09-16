@@ -123,10 +123,10 @@ export function ResumeCenterClient() {
           {data!.map((resume) => (
             <Card key={resume.id}>
               <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <FileText className="h-5 w-5 shrink-0 text-primary" />
-                    <CardTitle className="text-base truncate">{resume.name}</CardTitle>
+                    <CardTitle className="text-base truncate min-w-0">{resume.name}</CardTitle>
                     {resume.isDefault && <Badge variant="success" className="gap-1 shrink-0"><Star className="h-3 w-3" />Default</Badge>}
                     <Badge variant="secondary" className="shrink-0">{resume._count.versions} version{resume._count.versions !== 1 ? "s" : ""}</Badge>
                   </div>

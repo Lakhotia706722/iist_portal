@@ -72,11 +72,11 @@ export function CareerProfileView({ studentId, studentName, mode = "self" }: Pro
       {/* Hero card */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-start gap-5">
+          <div className="flex flex-wrap items-start gap-5">
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
               {(p.personal?.firstName?.[0] ?? p.name?.[0] ?? "?").toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-[140px]">
               <h2 className="text-xl font-bold">{p.personal?.firstName} {p.personal?.middleName} {p.personal?.lastName}</h2>
               <p className="text-muted-foreground text-sm mt-0.5">{p.branch?.name} · {p.batch?.academicYear}</p>
               <p className="text-muted-foreground text-sm">{p.branch?.department?.name}</p>
@@ -86,8 +86,8 @@ export function CareerProfileView({ studentId, studentName, mode = "self" }: Pro
                   <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" />{p.personal.phoneNumber}</span>
                 )}
                 {p.email && (
-                  <a href={`mailto:${p.email}`} className="flex items-center gap-1.5 hover:text-foreground">
-                    <Mail className="h-3.5 w-3.5" />{p.email}
+                  <a href={`mailto:${p.email}`} className="flex items-center gap-1.5 hover:text-foreground break-all">
+                    <Mail className="h-3.5 w-3.5 shrink-0" />{p.email}
                   </a>
                 )}
                 {p.address?.currentCity && (
