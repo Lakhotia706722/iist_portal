@@ -45,6 +45,11 @@ interface Opportunity {
   _count: {
     applications: number;
   };
+  /** Whether the CURRENT logged-in student has an application for this
+   *  opportunity — server-derived from their session, never a client id.
+   *  Distinct from _count.applications, which is a global total across
+   *  every student and must never be used to infer this. */
+  hasApplied: boolean;
 }
 
 interface OpportunityCardProps {
@@ -113,10 +118,21 @@ export function OpportunityCard({ opportunity, refreshing }: OpportunityCardProp
     maxCtc === -Infinity ? null : maxCtc
   );
 
-  // Status styling
+  // Status styling — "Applied" (specific to the current student) always
+  // takes precedence over the time-based badge, per the same priority the
+  // opportunity detail page already gives an existing application.
   const getStatusBadge = () => {
+    if (opportunity.hasApplied) {
+      return (
+        <Badge variant="secondary" className="bg-blue-50 text-blue-700 border-blue-200">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Applied
+        </Badge>
+      );
+    }
+
     const status = timeLeft?.status || opportunity.timeStatus;
-    
+
     switch (status) {
       case "closed":
         return (

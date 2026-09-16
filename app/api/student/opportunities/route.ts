@@ -6,7 +6,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth/auth";
+import { getStudentIdFromUserId } from "@/lib/auth/student-session";
 import { listActiveOpportunities } from "@/server/services/drive.service";
+import { prisma } from "@/lib/prisma";
 import { handleApiError } from "@/lib/api-utils";
 
 export async function GET(request: NextRequest) {
@@ -38,6 +40,24 @@ export async function GET(request: NextRequest) {
 
     const result = await listActiveOpportunities(filters);
 
+    // Which of these opportunities has the CURRENT student already applied
+    // to — derived from the authenticated session's studentId (never a
+    // client-supplied id), same "does an Application row exist" definition
+    // the opportunity detail route already uses. A raw applications count
+    // is global across all students and must never be used for this.
+    const studentId = await getStudentIdFromUserId(session.user.id);
+    const appliedDriveIds = new Set(
+      (
+        await prisma.application.findMany({
+          where: {
+            studentId,
+            driveId: { in: result.opportunities.map((o) => o.id) },
+          },
+          select: { driveId: true },
+        })
+      ).map((a) => a.driveId)
+    );
+
     // Add time-sensitive information for each opportunity
     const enhancedOpportunities = result.opportunities.map(opportunity => {
       let timeStatus = "active";
@@ -63,6 +83,7 @@ export async function GET(request: NextRequest) {
         timeStatus,
         timeRemaining,
         applicationCloseAt: opportunity.applicationCloseAt?.toISOString(),
+        hasApplied: appliedDriveIds.has(opportunity.id),
       };
     });
 

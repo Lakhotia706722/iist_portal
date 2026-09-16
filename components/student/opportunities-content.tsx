@@ -47,6 +47,7 @@ interface Opportunity {
   _count: {
     applications: number;
   };
+  hasApplied: boolean;
 }
 
 interface OpportunitiesResponse {

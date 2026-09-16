@@ -14,6 +14,14 @@ const nextConfig = {
       "bcryptjs",
       "@aws-sdk/client-s3",
       "@aws-sdk/s3-request-presigner",
+      // pdfkit reads its own built-in font metrics (.afm files) from disk at
+      // runtime via a plain relative path, not an import Next.js's bundler
+      // can see statically — without this, Vercel's serverless file-tracing
+      // never includes those data files, so PDF export works locally (full
+      // node_modules on disk) but throws ENOENT for Helvetica.afm in
+      // production. Marking it external makes Next.js trace and ship the
+      // whole package (data files included) instead of webpack-bundling it.
+      "pdfkit",
     ],
   },
   images: {
