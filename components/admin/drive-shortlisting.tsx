@@ -127,11 +127,18 @@ export function DriveShortlisting({ driveId }: Props) {
       return sortDir === "asc" ? va - vb : vb - va;
     });
 
-  const allSelected = displayed.length > 0 && displayed.every(a => selected.has(a.id));
+  // Only APPLIED/UNDER_REVIEW applications can actually be bulk-shortlisted
+  // or bulk-rejected (see bulkShortlistApplications) — an already-decided
+  // row (SHORTLISTED/REJECTED) selected into a bulk action always fails
+  // server-side, so it's disabled here rather than left to fail silently.
+  const isActionable = (a: Applicant) => a.status === "APPLIED" || a.status === "UNDER_REVIEW";
+  const actionableDisplayed = displayed.filter(isActionable);
+
+  const allSelected = actionableDisplayed.length > 0 && actionableDisplayed.every(a => selected.has(a.id));
   const toggle = (id: string) =>
     setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const toggleAll = () =>
-    allSelected ? setSelected(new Set()) : setSelected(new Set(displayed.map(a => a.id)));
+    allSelected ? setSelected(new Set()) : setSelected(new Set(actionableDisplayed.map(a => a.id)));
 
   const sortBy = (field: typeof sortField) => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -152,14 +159,30 @@ export function DriveShortlisting({ driveId }: Props) {
           note: bulkNote || undefined,
         }),
       });
-      if (!res.ok) throw new Error();
-      toast({ title: "Done", description: `${selected.size} application(s) updated.` });
+      // The API returns a specific, actionable message on failure (e.g.
+      // "Application is already shortlisted, not pending review") — this
+      // used to be discarded in favour of a generic "Bulk action failed."
+      // toast no matter what actually went wrong, matching the pattern
+      // the CSV upload handler below already uses.
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "Bulk action failed.");
+      const failedCount = data?.failed?.length ?? 0;
+      toast({
+        title: failedCount > 0 ? "Partially completed" : "Done",
+        description: failedCount > 0
+          ? `${data.updated} updated, ${failedCount} skipped (${data.failed[0].reason}).`
+          : `${selected.size} application(s) updated.`,
+      });
       setSelected(new Set());
       setBulkAction("");
       setBulkNote("");
       await fetchApplicants();
-    } catch {
-      toast({ title: "Error", description: "Bulk action failed.", variant: "destructive" });
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Bulk action failed.",
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -384,7 +407,12 @@ export function DriveShortlisting({ driveId }: Props) {
               {displayed.map((a, i) => (
                 <tr key={a.id} className={cn("border-b hover:bg-muted/20 transition-colors", i % 2 === 0 && "bg-background")}>
                   <td className="p-3">
-                    <button onClick={() => toggle(a.id)}>
+                    <button
+                      onClick={() => isActionable(a) && toggle(a.id)}
+                      disabled={!isActionable(a)}
+                      title={isActionable(a) ? undefined : "Already decided — no bulk action available"}
+                      className={cn(!isActionable(a) && "cursor-not-allowed opacity-40")}
+                    >
                       {selected.has(a.id)
                         ? <CheckSquare className="h-4 w-4 text-primary" />
                         : <Square className="h-4 w-4 text-muted-foreground" />}

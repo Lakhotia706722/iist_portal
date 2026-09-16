@@ -45,7 +45,13 @@ export async function issuePasswordResetToken(
     data: { userId: user.id, token, expiresAt },
   });
 
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
+  // Matches the fallback already used in lib/notifications/index.ts and
+  // lib/storage/local-adapter.ts — without it, an unset NEXT_PUBLIC_APP_URL
+  // (as in production today; see the Vercel env var checklist) makes this
+  // literally the string "undefined/reset-password?token=...", not merely
+  // a wrong host.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const resetUrl = `${appUrl}/reset-password?token=${token}`;
   const html = await render(
     PasswordResetEmail({ userName: user.name, resetUrl, expiresInMinutes: 60, variant })
   );

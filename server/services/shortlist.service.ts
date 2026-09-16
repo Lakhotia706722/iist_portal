@@ -295,12 +295,20 @@ export async function bulkShortlistApplications(
   updated: number;
   failed: Array<{ applicationId: string; reason: string }>;
 }> {
-  // Validate all applications exist and are in shortlistable status
-  const applications = await prisma.application.findMany({
-    where: {
-      id: { in: data.applicationIds },
-      status: { in: ["APPLIED", "UNDER_REVIEW"] },
-    },
+  // Fetch every requested application regardless of its current status —
+  // not just the shortlistable ones — so an already-decided application
+  // (e.g. re-selecting one that's already SHORTLISTED) can be reported
+  // back with its *actual* status instead of a generic "not found or not
+  // in shortlistable status" that reads the same whether the id was
+  // wrong, already handled, or belongs to another drive. Confirmed via
+  // production logs that this exact case (a lone selected application
+  // already at SHORTLISTED) was the only real trigger of this endpoint's
+  // 400s — the query itself is correct, but with nothing eligible in the
+  // selection it always threw the same uninformative message, and the
+  // frontend then discarded even that (see drive-shortlisting.tsx's
+  // applyBulk, which used to swallow the response body entirely).
+  const requested = await prisma.application.findMany({
+    where: { id: { in: data.applicationIds } },
     include: {
       student: { select: { id: true } },
       jobRole: {
@@ -311,11 +319,28 @@ export async function bulkShortlistApplications(
     },
   });
 
-  const validIds = applications.map(app => app.id);
-  const invalidIds = data.applicationIds.filter(id => !validIds.includes(id));
+  const byId = new Map(requested.map(app => [app.id, app]));
+  const SHORTLISTABLE_STATUSES = new Set(["APPLIED", "UNDER_REVIEW"]);
+  const validApps = requested.filter(app => SHORTLISTABLE_STATUSES.has(app.status));
+  const validIds = validApps.map(app => app.id);
+
+  const failed: Array<{ applicationId: string; reason: string }> = data.applicationIds
+    .filter(id => !validIds.includes(id))
+    .map(id => {
+      const app = byId.get(id);
+      return {
+        applicationId: id,
+        reason: app
+          ? `Application is already ${app.status.replace(/_/g, " ").toLowerCase()}, not pending review`
+          : "Application not found",
+      };
+    });
 
   if (validIds.length === 0) {
-    throw new ValidationError("No valid applications found for shortlisting");
+    const reasons = [...new Set(failed.map(f => f.reason))];
+    throw new ValidationError(
+      `No applications were updated — ${reasons.join("; ")}.`
+    );
   }
 
   // Determine target status
@@ -341,7 +366,7 @@ export async function bulkShortlistApplications(
 
   // Send notifications
   try {
-    const notificationPromises = applications.map(app => {
+    const notificationPromises = validApps.map(app => {
       if (newStatus === "SHORTLISTED") {
         return PlacementNotifications.shortlisted(
           app.student.id,
@@ -372,17 +397,14 @@ export async function bulkShortlistApplications(
       action: data.action,
       applicationIds: validIds,
       updated: updateResult.updated,
-      skipped: invalidIds,
+      skipped: failed.map(f => f.applicationId),
       note: data.note ?? null,
     },
   });
 
   return {
     updated: updateResult.updated,
-    failed: invalidIds.map(id => ({
-      applicationId: id,
-      reason: "Application not found or not in shortlistable status",
-    })),
+    failed,
   };
 }
 
