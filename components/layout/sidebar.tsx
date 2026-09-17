@@ -40,7 +40,7 @@ function NavList({
   onItemClick?: () => void;
 }) {
   return (
-    <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+    <nav className="min-h-0 flex-1 overflow-y-auto py-3 px-2 space-y-4 [-webkit-overflow-scrolling:touch]">
       {navGroups.map((group, gi) => (
         <div key={gi}>
           {group.title && !collapsed && (
@@ -200,7 +200,7 @@ export function Sidebar({ navGroups, mobileOpen = false, onMobileClose }: Sideba
       {/* Desktop persistent sidebar — unchanged from before. */}
       <aside
         className={cn(
-          "relative hidden md:flex h-screen flex-col border-r transition-all duration-200",
+          "relative hidden md:flex h-dvh flex-col border-r transition-all duration-200",
           "bg-sidebar text-sidebar-foreground",
           collapsed ? "w-16" : "w-60"
         )}

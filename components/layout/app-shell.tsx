@@ -42,20 +42,32 @@ export function AppShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar
         navGroups={navGroups}
         mobileOpen={mobileNavOpen}
         onMobileClose={() => setMobileNavOpen(false)}
       />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Topbar
           userName={userName}
           userRole={userRole}
           userEmail={userEmail}
           onMenuClick={() => setMobileNavOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        {/* h-dvh (not h-screen/100vh) so the shell matches the actual
+            visible viewport on mobile browsers, whose address bar shows
+            and hides as you scroll — with 100vh the shell was taller than
+            the real visible area, so the true bottom sat under the
+            collapsing/expanding browser chrome and took a couple of extra
+            scroll gestures to reach. -webkit-overflow-scrolling gives this
+            inner scroll region proper momentum/rubber-band scrolling on
+            iOS instead of the janky, easy-to-under-scroll default. */}
+        <main
+          className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 [-webkit-overflow-scrolling:touch]"
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
