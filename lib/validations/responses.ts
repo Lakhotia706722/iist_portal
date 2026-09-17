@@ -60,6 +60,17 @@ export const opportunityDetailResponseSchema = z.object({
         eligibilityRules: z.array(z.unknown()),
       })
     ),
+    prePlacementTalk: z
+      .object({
+        scheduledAt: z.string(),
+        durationMins: z.number().nullable(),
+        venue: z.string().nullable(),
+        meetingLink: z.string().nullable(),
+        instructions: z.string().nullable(),
+        faq: z.string().nullable(),
+      })
+      .nullable()
+      .optional(),
   }),
   eligibility: z.record(z.string(), z.unknown()),
 });

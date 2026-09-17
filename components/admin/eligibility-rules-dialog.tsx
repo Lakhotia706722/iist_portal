@@ -13,6 +13,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect as Select } from "@/components/ui/select";
@@ -21,6 +22,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { useToast } from "@/hooks/use-toast";
 import { ELIGIBILITY_FIELDS } from "@/lib/validations/placement";
 import { Plus, X, ShieldCheck } from "lucide-react";
+
+interface Batch {
+  id: string;
+  name: string;
+  academicYear: string;
+}
 
 type Rule = { id: string; field: string; operator: string; value: string; label: string; isActive: boolean };
 
@@ -70,6 +77,37 @@ export function EligibilityRulesDialog({ driveId, jobRoleId, jobRoleTitle, rules
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+
+  // Phase: BATCH rules used to require an admin to hand-type comma-separated
+  // academic years (e.g. "2021-2025,2022-2026") with no link to the real
+  // Batch table — a typo here silently rejected every student, the same
+  // trap operatorsFor() already guards against for the wrong-operator case.
+  // Sourcing options from /api/admin/batches (same query the Skill Up
+  // "Batch scope" dropdown already uses) removes that typo risk and keeps
+  // this in sync as batches are added/archived.
+  const batchesQuery = useQuery({
+    queryKey: ["batches"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/batches");
+      if (!res.ok) return { batches: [] as Batch[] };
+      const body = await res.json();
+      return { batches: (body.batches ?? body.items ?? []) as Batch[] };
+    },
+    enabled: field === "BATCH",
+  });
+  const selectedBatchYears = field === "BATCH" && value
+    ? value.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  function toggleBatchYear(academicYear: string) {
+    const set = new Set(selectedBatchYears);
+    if (set.has(academicYear)) {
+      set.delete(academicYear);
+    } else {
+      set.add(academicYear);
+    }
+    setValue(Array.from(set).join(","));
+  }
 
   function addRule() {
     if (!value.trim() || !label.trim()) {
@@ -159,7 +197,28 @@ export function EligibilityRulesDialog({ driveId, jobRoleId, jobRoleTitle, rules
                 {operatorsFor(field).map((o) => <option key={o} value={o}>{OPERATOR_LABELS[o] ?? o}</option>)}
               </Select>
             </div>
-            <Input placeholder="Value — e.g. 7.5 for CGPA, or BTECH-CSE for Branch" value={value} onChange={(e) => setValue(e.target.value)} />
+            {field === "BATCH" ? (
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+                {batchesQuery.isLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading batches…</p>
+                ) : (batchesQuery.data?.batches ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No batches found. Add one under Config → Departments → Batches.</p>
+                ) : (
+                  (batchesQuery.data?.batches ?? []).map((b) => (
+                    <label key={b.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedBatchYears.includes(b.academicYear)}
+                        onChange={() => toggleBatchYear(b.academicYear)}
+                      />
+                      {b.name} ({b.academicYear})
+                    </label>
+                  ))
+                )}
+              </div>
+            ) : (
+              <Input placeholder="Value — e.g. 7.5 for CGPA, or BTECH-CSE for Branch" value={value} onChange={(e) => setValue(e.target.value)} />
+            )}
             <Input placeholder="Label shown to students — e.g. Minimum CGPA 7.5" value={label} onChange={(e) => setLabel(e.target.value)} />
             <Button type="button" variant="outline" size="sm" onClick={addRule}><Plus className="h-3.5 w-3.5" /> Add rule</Button>
           </div>

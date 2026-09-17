@@ -130,6 +130,12 @@ export async function GET(
         applicationCloseAt: opportunity.applicationCloseAt?.toISOString(),
         driveStartDate: opportunity.driveStartDate?.toISOString(),
         driveEndDate: opportunity.driveEndDate?.toISOString(),
+        prePlacementTalk: opportunity.prePlacementTalk
+          ? {
+              ...opportunity.prePlacementTalk,
+              scheduledAt: opportunity.prePlacementTalk.scheduledAt.toISOString(),
+            }
+          : null,
       },
       eligibility: eligibilityResults,
       applicationStatus,

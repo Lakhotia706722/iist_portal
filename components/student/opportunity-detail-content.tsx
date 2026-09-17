@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { OpportunityHeader } from "./opportunity-header";
 import { OpportunityInfo } from "./opportunity-info";
+import { PrePlacementTalkCard } from "./pre-placement-talk-card";
 import { JobRolesList } from "./job-roles-list";
 import { ApplicationFlow } from "./application-flow";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -65,6 +66,14 @@ interface OpportunityData {
   _count: {
     applications: number;
   };
+  prePlacementTalk?: {
+    scheduledAt: string;
+    durationMins: number | null;
+    venue: string | null;
+    meetingLink: string | null;
+    instructions: string | null;
+    faq: string | null;
+  } | null;
 }
 
 interface EligibilityResult {
@@ -292,6 +301,9 @@ export function OpportunityDetailContent({ opportunityId }: { opportunityId: str
           <div className="lg:col-span-2 space-y-6">
             {/* Opportunity Information */}
             <OpportunityInfo opportunity={opportunity} />
+
+            {/* Pre-placement Talk (only shown if admin has set one up) */}
+            <PrePlacementTalkCard prePlacementTalk={opportunity.prePlacementTalk} />
 
             {/* Job Roles */}
             <JobRolesList

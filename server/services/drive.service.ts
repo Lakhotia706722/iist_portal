@@ -580,6 +580,14 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
     phone: string | null;
     designation: string | null;
   };
+  prePlacementTalk: {
+    scheduledAt: Date;
+    durationMins: number | null;
+    venue: string | null;
+    meetingLink: string | null;
+    instructions: string | null;
+    faq: string | null;
+  } | null;
 }> {
   const drive = await prisma.placementDrive.findUnique({
     where: { 
@@ -617,6 +625,16 @@ export async function getOpportunityDetail(id: string): Promise<DriveWithDetails
           jobRoles: true,
           applications: true,
           rounds: true,
+        },
+      },
+      prePlacementTalk: {
+        select: {
+          scheduledAt: true,
+          durationMins: true,
+          venue: true,
+          meetingLink: true,
+          instructions: true,
+          faq: true,
         },
       },
     },
