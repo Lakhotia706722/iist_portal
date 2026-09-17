@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { useToast } from "@/hooks/use-toast";
 import {
-  UserCheck, Filter, Upload, Search, CheckSquare, Square,
+  UserCheck, Filter, Upload, Search, CheckSquare, Square, Lock,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Download, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -381,7 +381,12 @@ export function DriveShortlisting({ driveId }: Props) {
             <thead>
               <tr className="border-b bg-muted/40">
                 <th className="p-3 w-10">
-                  <button onClick={toggleAll}>
+                  <button
+                    onClick={toggleAll}
+                    disabled={actionableDisplayed.length === 0}
+                    title={actionableDisplayed.length === 0 ? "No pending applications to select" : undefined}
+                    className={cn(actionableDisplayed.length === 0 && "cursor-not-allowed opacity-40")}
+                  >
                     {allSelected ? <CheckSquare className="h-4 w-4 text-primary" /> : <Square className="h-4 w-4 text-muted-foreground" />}
                   </button>
                 </th>
@@ -407,16 +412,23 @@ export function DriveShortlisting({ driveId }: Props) {
               {displayed.map((a, i) => (
                 <tr key={a.id} className={cn("border-b hover:bg-muted/20 transition-colors", i % 2 === 0 && "bg-background")}>
                   <td className="p-3">
-                    <button
-                      onClick={() => isActionable(a) && toggle(a.id)}
-                      disabled={!isActionable(a)}
-                      title={isActionable(a) ? undefined : "Already decided — no bulk action available"}
-                      className={cn(!isActionable(a) && "cursor-not-allowed opacity-40")}
-                    >
-                      {selected.has(a.id)
-                        ? <CheckSquare className="h-4 w-4 text-primary" />
-                        : <Square className="h-4 w-4 text-muted-foreground" />}
-                    </button>
+                    {isActionable(a) ? (
+                      <button onClick={() => toggle(a.id)}>
+                        {selected.has(a.id)
+                          ? <CheckSquare className="h-4 w-4 text-primary" />
+                          : <Square className="h-4 w-4 text-muted-foreground" />}
+                      </button>
+                    ) : (
+                      // Already SHORTLISTED/REJECTED — not eligible for a
+                      // bulk shortlist/reject action (that API call always
+                      // 400s), so there's nothing to select rather than a
+                      // disabled-looking control with no explanation. A
+                      // lock icon reads as "nothing to do here" instead of
+                      // "this checkbox is broken."
+                      <span title="Already decided — no bulk action needed" className="inline-flex cursor-default text-muted-foreground/50">
+                        <Lock className="h-4 w-4" />
+                      </span>
+                    )}
                   </td>
                   <td className="p-3">
                     <p className="font-medium">{studentName(a.student)}</p>
