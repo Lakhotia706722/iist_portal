@@ -45,23 +45,36 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
+
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — Firefox uses the standard properties (no ::-webkit-
+   scrollbar support there); Chrome/Safari/Edge use the ::-webkit- rules
+   below. Keeping both in sync is what makes the thin scrollbar consistent
+   across browsers instead of just Chromium/WebKit ones. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) hsl(var(--muted));
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   @apply bg-muted;
 }
+
 ::-webkit-scrollbar-thumb {
   @apply bg-border rounded-full;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/40;
 }

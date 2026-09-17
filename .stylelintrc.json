@@ -1,0 +1,7 @@
+{
+  "extends": ["stylelint-config-standard", "stylelint-config-tailwindcss"],
+  "rules": {
+    "no-descending-specificity": null,
+    "at-rule-prelude-no-invalid": null
+  }
+}
