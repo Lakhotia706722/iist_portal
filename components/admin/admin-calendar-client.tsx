@@ -114,7 +114,7 @@ export function AdminCalendarClient() {
       />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Add calendar event</DialogTitle>
           </DialogHeader>

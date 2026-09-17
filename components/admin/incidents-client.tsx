@@ -361,7 +361,7 @@ export function IncidentsClient({ studentId }: { studentId?: string }) {
 
       {/* Create */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Record incident</DialogTitle>
           </DialogHeader>

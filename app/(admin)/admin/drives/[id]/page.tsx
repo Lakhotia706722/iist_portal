@@ -362,7 +362,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
       {/* Edit Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Drive</DialogTitle>
             <DialogDescription>

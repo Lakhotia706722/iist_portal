@@ -299,7 +299,7 @@ export function AdminSkillUpClient() {
 
       {/* Create test */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Create test</DialogTitle>
           </DialogHeader>
@@ -542,7 +542,7 @@ function ResultsDialog({ test, onClose }: { test: Test; onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Results — {test.title}</DialogTitle>
         </DialogHeader>

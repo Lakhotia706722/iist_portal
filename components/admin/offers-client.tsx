@@ -418,7 +418,7 @@ export function OffersClient() {
 
       {/* Record a new offer */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Record an offer</DialogTitle>
           </DialogHeader>

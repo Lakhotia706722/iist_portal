@@ -294,7 +294,7 @@ export function DriveJobRoles({ driveId, driveStatus, onRolesChanged }: DriveJob
 
       {/* Create Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Job Role</DialogTitle>
             <DialogDescription>
@@ -311,7 +311,7 @@ export function DriveJobRoles({ driveId, driveStatus, onRolesChanged }: DriveJob
 
       {/* Edit Dialog */}
       <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Job Role</DialogTitle>
             <DialogDescription>Update this role&apos;s details.</DialogDescription>

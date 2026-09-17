@@ -306,7 +306,7 @@ export function AdminInterviewsClient({ studentId }: AdminInterviewsClientProps 
 
       {/* Schedule */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Schedule mock interview</DialogTitle>
           </DialogHeader>
@@ -434,7 +434,7 @@ export function AdminInterviewsClient({ studentId }: AdminInterviewsClientProps 
 
       {/* Scorecard */}
       <Dialog open={!!scoreTarget} onOpenChange={(o) => !o && setScoreTarget(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               Feedback — {scoreTarget ? studentName(scoreTarget.student) : ""}

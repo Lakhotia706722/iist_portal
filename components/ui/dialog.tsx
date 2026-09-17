@@ -43,7 +43,7 @@ function DialogContent({
         // max-h/overflow are defaults, not a hard requirement — a call site
         // passing its own max-h-*/overflow-y-* (several already do, e.g.
         // for very long forms) wins via twMerge, same as max-w overrides.
-        "relative w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-xl bg-background p-6 shadow-xl",
+        "relative w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-xl bg-background p-6 shadow-xl",
         className
       )}
       role="dialog"
