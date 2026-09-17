@@ -24,7 +24,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Matches the Vercel project's configured Node version (24.x,
+          # confirmed via `vercel project ls`) — was 20 here, which never
+          # caused a failure on its own but meant CI wasn't actually
+          # verifying the app against the same runtime it deploys on.
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
@@ -57,7 +61,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
