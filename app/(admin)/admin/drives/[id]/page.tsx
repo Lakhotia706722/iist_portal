@@ -206,21 +206,21 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
       <Card>
         <CardHeader>
           <div className="flex items-start justify-between">
-            <div className="flex items-start space-x-4">
-              <Avatar className="h-16 w-16">
+            <div className="flex min-w-0 items-start space-x-4">
+              <Avatar className="h-16 w-16 shrink-0">
                 <AvatarImage src={drive.company.logoUrl || ""} alt={drive.company.name} />
                 <AvatarFallback>
                   {drive.company.name.substring(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
-              
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <CardTitle className="text-2xl">{drive.title}</CardTitle>
+
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-3">
+                  <CardTitle className="truncate text-2xl">{drive.title}</CardTitle>
                   <DriveStatusBadge drive={drive} />
                 </div>
-                
-                <CardDescription className="flex items-center gap-4 text-base">
+
+                <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base">
                   <span className="flex items-center gap-1">
                     <Building2 className="h-4 w-4" />
                     {drive.company.name}
@@ -236,7 +236,7 @@ export default function DriveDetailPage({ params }: DriveDetailPageProps) {
 
                 {drive.locations.length > 0 && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
+                    <MapPin className="h-4 w-4 shrink-0" />
                     <span>{drive.locations.join(", ")}</span>
                   </div>
                 )}

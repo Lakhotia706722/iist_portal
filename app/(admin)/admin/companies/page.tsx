@@ -349,27 +349,28 @@ export default function CompaniesPage() {
           {companies.map((company) => (
             <Card key={company.id} className="relative">
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3">
-                    <Avatar className="h-12 w-12">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start space-x-3">
+                    <Avatar className="h-12 w-12 shrink-0">
                       <AvatarImage src={company.logoUrl || ""} alt={company.name} />
                       <AvatarFallback>
                         {company.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{company.name}</CardTitle>
+                    <div className="min-w-0 space-y-1">
+                      <CardTitle className="truncate text-lg">{company.name}</CardTitle>
                       <Badge variant={company.isActive ? "default" : "secondary"}>
                         {company.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                   </div>
-                  
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="shrink-0"
                         disabled={actionLoading === company.id}
                       >
                         <MoreHorizontal className="h-4 w-4" />

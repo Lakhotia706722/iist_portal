@@ -385,22 +385,22 @@ export default function DrivesPage() {
               onClick={() => handleViewDrive(drive)}
             >
               <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3">
-                    <Avatar className="h-12 w-12">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start space-x-3">
+                    <Avatar className="h-12 w-12 shrink-0">
                       <AvatarImage src={drive.company.logoUrl || ""} alt={drive.company.name} />
                       <AvatarFallback>
                         {drive.company.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-3">
-                        <CardTitle className="text-lg hover:text-primary" onClick={() => handleViewDrive(drive)}>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <CardTitle className="truncate text-lg hover:text-primary" onClick={() => handleViewDrive(drive)}>
                           {drive.title}
                         </CardTitle>
                         <DriveStatusBadge drive={drive} />
                       </div>
-                      <CardDescription className="flex items-center gap-4">
+                      <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <span>{drive.company.name}</span>
                         <span>•</span>
                         <span>{drive.academicYear}</span>
@@ -409,12 +409,13 @@ export default function DrivesPage() {
                       </CardDescription>
                     </div>
                   </div>
-                  
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="shrink-0"
                         disabled={actionLoading === drive.id}
                         onClick={(e) => e.stopPropagation()}
                       >
