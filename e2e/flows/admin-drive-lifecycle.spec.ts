@@ -111,11 +111,16 @@ test("Admin drive lifecycle: create company+drive+role, publish, shortlist, roun
   await page.getByRole("combobox").filter({ hasText: /choose action/i }).click();
   await page.getByRole("option", { name: /^shortlist$/i }).click();
   await page.getByRole("button", { name: /^apply$/i }).click();
-  // listShortlistableApplications() only returns APPLIED/UNDER_REVIEW
-  // applications — once shortlisted, the row correctly disappears from
-  // this queue entirely (that's the real, DB-verified signal, not a
-  // "Shortlisted" label appearing in this specific view).
-  await expect(page.getByText("E2E Student A")).toHaveCount(0, { timeout: 15_000 });
+  // listShortlistableApplications() deliberately keeps SHORTLISTED (and
+  // REJECTED) applications visible in this same queue now — "Application
+  // .status is the single source of truth for this tab... a SHORTLISTED
+  // application never disappears from here just because it's no longer
+  // APPLIED/UNDER_REVIEW" (see shortlist.service.ts). The row staying put
+  // with its status badge updated is the real signal now, not the row
+  // vanishing.
+  await expect(
+    page.locator("tr", { hasText: "E2E Student A" }).getByText("Shortlisted")
+  ).toBeVisible({ timeout: 15_000 });
 
   const shortlisted = await prisma.application.findUniqueOrThrow({ where: { id: application.id } });
   expect(shortlisted.status).toBe("SHORTLISTED");

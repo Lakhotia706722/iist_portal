@@ -195,7 +195,13 @@ test("3 (fast path) — Admin shortlists an application; Student's already-open 
     await admin.page.getByRole("combobox").filter({ hasText: /choose action/i }).click();
     await admin.page.getByRole("option", { name: /^shortlist$/i }).click();
     await admin.page.getByRole("button", { name: /^apply$/i }).click();
-    await expect(admin.page.getByText(studentName)).toHaveCount(0, { timeout: 15_000 });
+    // listShortlistableApplications() deliberately keeps SHORTLISTED
+    // applications visible in this same queue (see the matching note in
+    // admin-drive-lifecycle.spec.ts) — confirm the action landed via the
+    // row's own updated status badge, not by the row vanishing.
+    await expect(
+      admin.page.locator("tr", { hasText: studentName }).getByText("Shortlisted")
+    ).toBeVisible({ timeout: 15_000 });
 
     await expect(student.page.locator("text=Shortlisted").first()).toBeVisible({ timeout: 20_000 });
     const elapsedMs = Date.now() - openedAt;
