@@ -36,10 +36,7 @@
     },
     "exceljs": {
       "uuid": "^11.1.1"
-    },
-    "@emnapi/core": "1.11.3",
-    "@emnapi/runtime": "1.11.3",
-    "@emnapi/wasi-threads": "1.2.3"
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
