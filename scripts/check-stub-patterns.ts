@@ -49,6 +49,10 @@ const ALLOWLIST: Record<string, string[]> = {
   // — the actual copy already happened via navigator.clipboard.writeText;
   // this setTimeout only reverts the icon, nothing async is being faked.
   "components/admin/students-directory-client.tsx": ["setTimeout(() => setCopiedIndex((v) => (v === index ? null : v)), 1500)"],
+  // Debounce timer — same shape and purpose as global-search.tsx's above,
+  // just local state instead of a shared hook: delays the search fetch
+  // until typing pauses, nothing async is being faked.
+  "app/(admin)/admin/companies/page.tsx": ["setTimeout(() => setSearchQuery(searchInput), 300)"],
 };
 
 type Finding = { file: string; line: number; text: string; rule: string };
