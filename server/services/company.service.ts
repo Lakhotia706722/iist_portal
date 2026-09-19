@@ -23,6 +23,7 @@ export type CompanyWithDrives = {
   location: string | null;
   headcount: string | null;
   logoKey: string | null;
+  logoUrl: string | null;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -37,6 +38,20 @@ const companyInclude = {
     select: { drives: true },
   },
 } as const;
+
+/**
+ * logoKey is the persisted storage key, not something a browser can load
+ * directly — every read path must resolve it to a fetchable URL the same
+ * way resume/document/etc. keys already are elsewhere in the codebase.
+ */
+async function withLogoUrl<T extends { logoKey: string | null }>(
+  company: T
+): Promise<T & { logoUrl: string | null }> {
+  return {
+    ...company,
+    logoUrl: company.logoKey ? await getStorageAdapter().getSignedUrl(company.logoKey) : null,
+  };
+}
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +81,7 @@ export async function createCompany(
     newValues: { name: company.name, slug: company.slug, industry: company.industry },
   });
 
-  return company;
+  return withLogoUrl(company);
 }
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
@@ -116,7 +131,7 @@ export async function listCompanies(filters?: {
   ]);
 
   return {
-    companies,
+    companies: await Promise.all(companies.map(withLogoUrl)),
     total,
   };
 }
@@ -129,7 +144,7 @@ export async function getCompanyById(id: string): Promise<CompanyWithDrives> {
 
   if (!company) throw new NotFoundError("Company not found");
 
-  return company;
+  return withLogoUrl(company);
 }
 
 export async function getCompanyBySlug(slug: string): Promise<CompanyWithDrives> {
@@ -140,7 +155,7 @@ export async function getCompanyBySlug(slug: string): Promise<CompanyWithDrives>
 
   if (!company) throw new NotFoundError("Company not found");
 
-  return company;
+  return withLogoUrl(company);
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -190,7 +205,7 @@ export async function updateCompany(
     newValues: { name: company.name, industry: company.industry },
   });
 
-  return company;
+  return withLogoUrl(company);
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
@@ -261,7 +276,7 @@ export async function toggleCompanyStatus(id: string, actorId?: string): Promise
     newValues: { isActive: updated.isActive },
   });
 
-  return updated;
+  return withLogoUrl(updated);
 }
 
 // ─── Statistics ───────────────────────────────────────────────────────────────

@@ -88,7 +88,9 @@ export default function CompaniesPage() {
   const [pagination, setPagination] = useState<{ total: number; hasMore: boolean }>({ total: 0, hasMore: false });
   const [stats, setStats] = useState<CompanyStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [error, setError] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -148,12 +150,21 @@ export default function CompaniesPage() {
       });
     } finally {
       setLoading(false);
+      setInitialLoad(false);
     }
   }, [searchQuery, industryFilter, statusFilter, page, toast]);
 
   useEffect(() => {
     fetchCompanies();
   }, [fetchCompanies]);
+
+  // Debounce the raw input before it drives a fetch — a request (and the
+  // loading-state re-render below) firing on every keystroke was what
+  // made the search box drop focus after each character.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // A filter change makes the current page number meaningless against the
   // new result set — back to page one, same convention as
@@ -252,7 +263,7 @@ export default function CompaniesPage() {
     return INDUSTRY_OPTIONS.find(opt => opt.value === industry)?.label || industry;
   };
 
-  if (loading) {
+  if (loading && initialLoad) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner />
@@ -296,8 +307,8 @@ export default function CompaniesPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Search companies..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-10"
                 />
               </div>
